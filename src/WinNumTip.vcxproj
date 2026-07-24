@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{7E0F8396-45E6-4E49-91D3-D27ED00B2CAD}</ProjectGuid>
+    <RootNamespace>WinNumTip</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\obj\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <!-- Non-incremental link in Release so the deterministic /Brepro output is stable. -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+
+  <!-- Common settings: no CRT, size-optimized, custom entry point. -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- Optimize for size. -->
+      <Optimization>MinSpace</Optimization>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <ExceptionHandling>false</ExceptionHandling>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- No CRT: skip the stack-checking helper (__chkstk lives in the CRT). -->
+      <AdditionalOptions>/Gs9999999 %(AdditionalOptions)</AdditionalOptions>
+      <!-- Precompiled header. -->
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <EntryPointSymbol>Entry</EntryPointSymbol>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib</AdditionalDependencies>
+    </Link>
+    <Manifest>
+      <!-- Embeds WinNumTip.manifest (Common-Controls v6 for visual styles +
+           Per-Monitor-V2 DPI) via the toolchain's manifest tool. -->
+      <AdditionalManifestFiles>res\WinNumTip.manifest</AdditionalManifestFiles>
+    </Manifest>
+    <ResourceCompile>
+      <Culture>0x0000</Culture>   <!-- Language-neutral (invariant) resources -->
+      <!-- Version info (res\WinNumTip.rc2) is stamped from Directory.Build.props:
+           $(Version) drives the numeric + product strings, $(DisplayVersion) the
+           file-version string, $(CurrentYear) the copyright year. -->
+      <PreprocessorDefinitions>APP_VER_COMMA=$(Version.Replace('.',','));APP_VER_STR=$(DisplayVersion);APP_PROD_STR=$(Version);APP_YEAR=$(CurrentYear);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <!-- Debug: no optimization (overrides the size-optimized common settings) for
+           accurate stepping/inspection. No-CRT flags stay inherited from the common
+           group (/Gs9999999, BufferSecurityCheck off). -->
+      <Optimization>Disabled</Optimization>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
+      <PreprocessorDefinitions>_DEBUG;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <!-- Make the rc2's VS_FF_DEBUG file flag actually apply in Debug builds. -->
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Deterministic (reproducible) codegen: identical sources -> identical bits. -->
+      <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <!-- Deterministic link: reproducible PE timestamp + debug GUID (no wall clock). -->
+      <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="Taskbar.h" />
+    <ClInclude Include="Overlay.h" />
+    <ClInclude Include="NotifyIcon.h" />
+    <ClInclude Include="KeyboardHook.h" />
+    <ClInclude Include="Keyboard.h" />
+    <ClInclude Include="About.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="stdafx.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Taskbar.cpp" />
+    <ClCompile Include="Overlay.cpp" />
+    <ClCompile Include="NotifyIcon.cpp" />
+    <ClCompile Include="KeyboardHook.cpp" />
+    <ClCompile Include="WinNumTip.cpp" />
+    <ClCompile Include="About.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="WinNumTip.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\WinNumTip.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\WinNumTip.manifest" />
+    <None Include="res\WinNumTip.rc2" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

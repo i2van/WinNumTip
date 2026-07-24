@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="Win32" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Project Path="src\WinNumTip.vcxproj" Id="7e0f8396-45e6-4e49-91d3-d27ed00b2cad" />
+</Solution>

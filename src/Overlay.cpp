@@ -1,0 +1,421 @@
+#include "stdafx.h"
+#include "Overlay.h"
+#include "Taskbar.h"
+#include "Keyboard.h"
+
+namespace {
+
+LPCTSTR const kOverlayClass = TEXT("WinNumTipOverlay-") APP_GUID;
+
+// Win+0..9: 10 is the most taskbar buttons we label.
+constexpr int kMaxBadges = 10;
+
+// Control id used to tell a separator static apart from a number-label static in
+// WM_CTLCOLORSTATIC (labels are transparent; separators are a solid filled line).
+constexpr int kSepId = 1;
+
+// Module state. The overlay window lives for the whole "Win held" session so its
+// refresh timer keeps polling even when the bar is momentarily empty; only the child
+// controls and per-show theme/font/brush are swapped as the taskbar changes.
+HWND     g_overlay   = nullptr;
+HFONT    g_font      = nullptr;
+bool     g_ownFont   = false;                  // true when g_font must be DeleteObject'd (not a stock font)
+HTHEME   g_theme     = nullptr;
+HBRUSH   g_lineBrush = nullptr;                 // solid brush that paints the separator lines
+int      g_bgPart    = TBP_BACKGROUNDBOTTOM;   // taskbar background part for the docked edge
+COLORREF g_textColor = 0;                      // resolved from the theme / system colors in Show
+bool     g_active    = false;                  // true between Show (Win down) and Hide (Win up)
+
+// Retained so the refresh timer can rebuild the bar in place when the taskbar's
+// buttons change while it is shown (e.g. an app minimizes/closes to the tray, which
+// removes its button and would otherwise leave an orphaned number behind).
+IUIAutomation* g_uia   = nullptr;
+HINSTANCE      g_inst  = nullptr;
+int            g_snapN = 0;                     // button count captured when the bar was built
+RECT           g_snap[kMaxBadges];              // button rects captured when the bar was built
+constexpr UINT_PTR kRefreshTimer = 1;
+constexpr UINT     kRefreshMs    = 200;
+
+// Safety-net self-heal for the rare case where a Win key-up is never delivered to the
+// hook at all (e.g. Win+L switching to the secure desktop). The refresh timer hides
+// the bar once the Windows key has read released for this many consecutive ticks. The
+// hook already handles normal and injected releases, so this only needs to catch a
+// fully stuck bar; the multi-tick debounce keeps a transient key-state blip during a
+// Win+<key> chord from hiding the bar while Win is still physically held.
+constexpr int  kWinUpTicksToHide = 5;   // ~1s at kRefreshMs
+int            g_winUpTicks      = 0;
+
+// Forward decls. Refresh() rebuilds the bar's contents in place for the current
+// taskbar; while a session is active the overlay window and its timer persist, so
+// updates never flicker and an empty period (0 buttons) can recover when a button
+// reappears.
+void Refresh();
+
+// Count the current on-screen taskbar buttons (0 when the taskbar is missing or
+// obscured), filling 'out'. Shared by the timer's change check and Refresh.
+[[nodiscard]] int CollectCurrent(RECT* out, int max);
+
+// Destroy all child controls (number labels + separators) of the overlay window.
+void DestroyChildren(HWND wnd) {
+    HWND c;
+    while ((c = GetWindow(wnd, GW_CHILD)) != nullptr) DestroyWindow(c);
+}
+
+// Release the per-show theme/font/brush. The window itself is left intact so it can
+// be reused by a refresh; the caller decides whether to destroy the window.
+void FreeResources() {
+    if (g_theme) { CloseThemeData(g_theme); g_theme = nullptr; }
+    if (g_font)  { if (g_ownFont) DeleteObject(g_font); g_font = nullptr; g_ownFont = false; }
+    if (g_lineBrush) { DeleteObject(g_lineBrush); g_lineBrush = nullptr; }
+}
+
+// Paint the bar background with the taskbar theme (falls back to the 3D face color
+// when the theme is unavailable, e.g. classic mode). Used from both WM_ERASEBKGND
+// and WM_PRINTCLIENT so DrawThemeParentBackground can show it behind the labels.
+void PaintBackground(HWND hwnd, HDC hdc) {
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    if (g_theme) DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
+    else         FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1));
+}
+
+// WM_ERASEBKGND / WM_PRINTCLIENT: paint the themed bar background.
+BOOL OnEraseBkgnd(HWND hwnd, HDC hdc) {
+    PaintBackground(hwnd, hdc);
+
+    return TRUE;
+}
+
+void OnPrintClient(HWND hwnd, HDC hdc) {
+    PaintBackground(hwnd, hdc);
+}
+
+// WM_CTLCOLORSTATIC. A separator static is a thin control filled with the solid line
+// brush; the system fills its whole client rect with the returned brush, giving a
+// crisp line that contrasts with the bar (no custom drawing needed). A number label
+// instead gets the parent's themed background painted into its DC (via
+// DrawThemeParentBackground) and a hollow brush, so its text draws transparently.
+HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
+    if (GetDlgCtrlID(child) == kSepId && g_lineBrush)
+        return g_lineBrush;
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, g_textColor);
+    DrawThemeParentBackground(child, hdc, nullptr);
+
+    return static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
+}
+
+// windowsx-style cracker for WM_PRINTCLIENT (not provided by windowsx.h), so it can
+// be dispatched with HANDLE_MSG alongside the standard messages.
+//   handler signature: void fn(HWND hwnd, HDC hdc)
+#define HANDLE_WM_PRINTCLIENT(hwnd, wParam, lParam, fn) ((fn)((hwnd), (HDC)(wParam)), 0L)
+
+// WM_TIMER: while a session is active, first make sure the Windows key is still
+// physically down -- if a Win key-up was missed (it can be swallowed or delivered as
+// injected during Win+<key> chords), self-hide so the bar never lingers with Win
+// released. Otherwise re-collect the taskbar buttons and rebuild the bar if they
+// changed, so numbers stay aligned when a button appears/disappears without waiting
+// for the Win key to be released.
+void OnTimer(HWND /*hwnd*/, UINT id) {
+    if (id != kRefreshTimer) return;
+
+    const bool winDown = Keyboard::IsWinDown();
+    g_winUpTicks = winDown ? 0 : g_winUpTicks + 1;
+    if (g_winUpTicks >= kWinUpTicksToHide) {
+        Overlay::Hide();
+
+        return;
+    }
+
+    RECT cur[kMaxBadges];
+    const int m = CollectCurrent(cur, kMaxBadges);
+    bool changed = m != g_snapN;
+    for (int i = 0; !changed && i < m; ++i)
+        if (!EqualRect(&cur[i], &g_snap[i])) changed = true;
+    if (changed) Refresh();   // rebuilds the bar in place (no flicker); recovers from empty
+}
+
+LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        HANDLE_MSG(hwnd, WM_ERASEBKGND,      OnEraseBkgnd);
+        HANDLE_MSG(hwnd, WM_PRINTCLIENT,     OnPrintClient);
+        HANDLE_MSG(hwnd, WM_CTLCOLORSTATIC,  OnCtlColorStatic);
+        HANDLE_MSG(hwnd, WM_TIMER,           OnTimer);
+        default: return DefWindowProc(hwnd, msg, wParam, lParam);
+    }
+}
+
+[[nodiscard]] HWND CreateOverlayWindow(HINSTANCE inst) {
+    return CreateWindowEx(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+        kOverlayClass, TEXT(""), WS_POPUP | WS_CLIPCHILDREN,
+        0, 0, 10, 10, nullptr, nullptr, inst, nullptr);
+}
+
+// Create a themed STATIC child (a number label or a separator line) relative to the
+// overlay origin, wired up to the shared taskbar font. 'id' distinguishes separators
+// (kSepId) from labels (0) for WM_CTLCOLORSTATIC.
+void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
+               int x, int y, int w, int h, int id = 0) {
+    HWND s = CreateWindowEx(0, TEXT("STATIC"), text,
+                            WS_CHILD | WS_VISIBLE | style,
+                            x, y, w, h, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
+    if (s && g_font) SetWindowFont(s, g_font, FALSE);
+}
+
+// Choose the number text color. Prefer the taskbar theme's own text color; when the
+// theme has none (or is unavailable), fall back to whichever system color contrasts
+// with the sampled bar background (COLOR_WINDOWTEXT vs COLOR_HIGHLIGHTTEXT).
+
+// Sample the center pixel of the themed bar background, or CLR_INVALID when the bar
+// is not themed. Used to pick both the contrasting text color and the (blended)
+// separator color.
+[[nodiscard]] COLORREF SampleBarColor(HTHEME theme, int part, int w, int h) {
+    if (!theme || w <= 0 || h <= 0) return CLR_INVALID;
+    HDC screen = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(screen);
+    HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
+    HGDIOBJ old = SelectObject(mem, bmp);
+    RECT rc = { 0, 0, w, h };
+    DrawThemeBackground(theme, mem, part, 0, &rc, nullptr);
+    const COLORREF c = GetPixel(mem, w / 2, h / 2);
+    SelectObject(mem, old);
+    DeleteObject(bmp);
+    DeleteDC(mem);
+    ReleaseDC(nullptr, screen);
+
+    return c;
+}
+
+// Contrasting number-text color for the given bar background: prefer the theme's own
+// text color, else pick the light/dark system text color by background luminance.
+[[nodiscard]] COLORREF PickTextColor(HTHEME theme, int part, COLORREF bar) {
+    COLORREF themed = 0;
+    if (theme && SUCCEEDED(GetThemeColor(theme, part, 0, TMT_TEXTCOLOR, &themed)))
+        return themed;
+    if (bar == CLR_INVALID) return GetSysColor(COLOR_WINDOWTEXT);
+    const int lum = (GetRValue(bar) * 299 + GetGValue(bar) * 587 + GetBValue(bar) * 114) / 1000;
+
+    return lum < 128 ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT);
+}
+
+// Separator color: the midpoint between the text color and the bar background, so the
+// divider is always clearly visible (half the text's contrast) yet softer than the
+// numbers. Falls back to the grayed-text system color when the bar isn't themed.
+[[nodiscard]] COLORREF PickSeparatorColor(COLORREF text, COLORREF bar) {
+    if (bar == CLR_INVALID) return GetSysColor(COLOR_GRAYTEXT);
+
+    return RGB((GetRValue(text) + GetRValue(bar)) / 2,
+               (GetGValue(text) + GetGValue(bar)) / 2,
+               (GetBValue(text) + GetBValue(bar)) / 2);
+}
+
+} // namespace
+
+namespace Overlay {
+
+void Init(HINSTANCE inst) {
+    WNDCLASSEX wc;
+    ZeroMemory(&wc, sizeof(wc));
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = OverlayProc;
+    wc.hInstance = inst;
+    wc.lpszClassName = kOverlayClass;
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hbrBackground = nullptr;   // background comes from the taskbar theme
+    VERIFY(RegisterClassEx(&wc));
+}
+
+void Shutdown() {
+    Hide();
+}
+
+// Fully tear down the overlay session (called on Win release). Destroys the window
+// (and its timer + child controls) and releases the per-show resources.
+void Hide() {
+    g_active = false;
+    if (g_overlay) {
+        DestroyWindow(g_overlay);   // also destroys the child STATIC controls + timer
+        g_overlay = nullptr;
+    }
+    FreeResources();
+    g_snapN = 0;
+}
+
+// Begin an overlay session (Win pressed). Creates the persistent window + refresh
+// timer once, then builds the bar for the current taskbar. The window and timer stay
+// alive for the whole session so the bar keeps tracking taskbar changes -- and can
+// reappear after an empty period -- until Hide().
+void Show(IUIAutomation* uia, HINSTANCE inst) {
+    if (g_active) return;   // already in a session; refreshes go through the timer
+    g_uia = uia;
+    g_inst = inst;
+    g_winUpTicks = 0;
+    if (!g_overlay) {
+        g_overlay = CreateOverlayWindow(inst);
+        if (!g_overlay) return;
+        VERIFY(SetTimer(g_overlay, kRefreshTimer, kRefreshMs, nullptr));
+    }
+    g_active = true;
+    Refresh();
+}
+
+} // namespace Overlay
+
+namespace {
+
+int CollectCurrent(RECT* out, int max) {
+    HWND tray = Taskbar::Find();
+    if (!tray || Taskbar::Obscured(tray)) return 0;
+
+    return Taskbar::CollectButtonRects(g_uia, tray, out, max);
+}
+
+// Hide the bar's contents while keeping the window and its timer alive, so the session
+// keeps polling and the bar can reappear when a button comes back (e.g. the only app's
+// button briefly disappears during a Win+Arrow switch).
+void ApplyEmpty() {
+    if (g_overlay) ShowWindow(g_overlay, SW_HIDE);
+    if (g_overlay) DestroyChildren(g_overlay);
+    FreeResources();
+    g_snapN = 0;
+}
+
+// Rebuild the bar's contents in place for the current taskbar state. The window
+// already exists (created by Show); on every refresh its child controls and per-show
+// resources are swapped with painting suspended, so numbers realign without flicker.
+// When there are no buttons to label the window is hidden but the session continues.
+void Refresh() {
+    if (!g_overlay) return;
+
+    RECT btn[kMaxBadges];
+    const int n = CollectCurrent(btn, kMaxBadges);
+    if (n == 0) { ApplyEmpty(); return; }
+
+    HWND tray = Taskbar::Find();
+    RECT tr;
+    UINT edge;
+    if (!tray || !Taskbar::GetPos(tr, edge)) { ApplyEmpty(); return; }
+
+    // Bar thickness comes from the DPI-aware menu-bar button height; for a side-docked
+    // taskbar the label width uses the matching menu-bar button width (never wider than
+    // the narrowest taskbar button) so the bar stays a slim strip.
+    const UINT dpi = GetDpiForWindow(tray) ? GetDpiForWindow(tray) : USER_DEFAULT_SCREEN_DPI;
+    const int BH = GetSystemMetricsForDpi(SM_CYMENUSIZE, dpi);
+    int minBtnW = tr.right - tr.left;
+    for (int i = 0; i < n; ++i) {
+        const int w = btn[i].right - btn[i].left;
+        if (w > 0 && w < minBtnW) minBtnW = w;
+    }
+    int bw = GetSystemMetricsForDpi(SM_CXMENUSIZE, dpi);
+    if (bw > minBtnW) bw = minBtnW;
+    const int BW = bw;
+
+    const bool vertical = edge == ABE_LEFT || edge == ABE_RIGHT;
+
+    // One continuous strip spanning from the first to the last taskbar button along
+    // the taskbar's long axis, laid just OUTSIDE the taskbar's inner edge so it sits
+    // above (or beside) the buttons without overlapping the taskbar itself.
+    int lo = vertical ? btn[0].top   : btn[0].left;
+    int hi = vertical ? btn[0].bottom: btn[0].right;
+    for (int i = 1; i < n; ++i) {
+        const int a = vertical ? btn[i].top    : btn[i].left;
+        const int b = vertical ? btn[i].bottom : btn[i].right;
+        if (a < lo) lo = a;
+        if (b > hi) hi = b;
+    }
+
+    RECT ov;
+    switch (edge) {
+        case ABE_TOP:    ov = {.left = lo, .top = tr.bottom, .right = hi, .bottom = tr.bottom + BH }; g_bgPart = TBP_BACKGROUNDTOP;    break;
+        case ABE_LEFT:   ov = {.left = tr.right, .top = lo, .right = tr.right + BW, .bottom = hi };   g_bgPart = TBP_BACKGROUNDLEFT;   break;
+        case ABE_RIGHT:  ov = {.left = tr.left - BW, .top = lo, .right = tr.left, .bottom = hi };     g_bgPart = TBP_BACKGROUNDRIGHT;  break;
+        default:         ov = {.left = lo, .top = tr.top - BH, .right = hi, .bottom = tr.top };       g_bgPart = TBP_BACKGROUNDBOTTOM; break; // BOTTOM
+    }
+    const int OW = ov.right - ov.left;
+    const int OH = ov.bottom - ov.top;
+    if (OW <= 0 || OH <= 0) { ApplyEmpty(); return; }
+
+    // Update in place: suspend the window's painting, drop the old child controls and
+    // per-show resources, then rebuild everything and repaint once (double-buffered
+    // via WS_EX_COMPOSITED) so the swap is flicker-free.
+    SendMessage(g_overlay, WM_SETREDRAW, FALSE, 0);
+    DestroyChildren(g_overlay);
+    FreeResources();
+    SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
+                 SWP_NOACTIVATE | SWP_NOREDRAW);
+
+    g_theme = OpenThemeData(g_overlay, TEXT("TaskBar"));
+    const COLORREF barColor = SampleBarColor(g_theme, g_bgPart, OW, OH);
+    g_textColor = PickTextColor(g_theme, g_bgPart, barColor);
+
+    // Shell/taskbar UI font (SPI_GETNONCLIENTMETRICS, DPI-aware) so the numbers
+    // match the taskbar's own text; fall back to the system default GUI font.
+    NONCLIENTMETRICS ncm;
+    ZeroMemory(&ncm, sizeof(ncm));
+    ncm.cbSize = sizeof(ncm);
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi)) {
+        g_font = CreateFontIndirect(&ncm.lfMessageFont);
+        g_ownFont = g_font != nullptr;
+    }
+    if (!g_font) {
+        g_font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+        g_ownFont = false;
+    }
+
+    // Pass 1: a centered number label per taskbar button (labels span the full button
+    // width and meet at the boundaries). Pass 2: a separator line on each boundary,
+    // created last so it sits on top of the labels' Z-order and is not occluded. Each
+    // separator is a plain STATIC filled with the solid line brush (via
+    // WM_CTLCOLORSTATIC): a neutral divider midway between the text and bar colors so
+    // it is clearly visible yet softer than the numbers. Its thickness comes from the
+    // system border metric and it is inset from the bar ends by the fixed window-frame
+    // metric, so both scale with DPI.
+    g_lineBrush = CreateSolidBrush(PickSeparatorColor(g_textColor, barColor));
+    const int lineW  = max(1, GetSystemMetricsForDpi(SM_CXBORDER, dpi));
+    const int insetX = GetSystemMetricsForDpi(SM_CXFIXEDFRAME, dpi);
+    const int insetY = GetSystemMetricsForDpi(SM_CYFIXEDFRAME, dpi);
+
+    for (int i = 0; i < n; ++i) {
+        TCHAR s[2];
+        s[0] = i < 9 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
+        s[1] = 0;
+        if (vertical) {
+            const int y = btn[i].top - ov.top;
+            const int h = btn[i].bottom - btn[i].top;
+            AddStatic(g_overlay, g_inst, SS_CENTER | SS_CENTERIMAGE, s, 0, y, OW, h);
+        } else {
+            const int x = btn[i].left - ov.left;
+            const int w = btn[i].right - btn[i].left;
+            AddStatic(g_overlay, g_inst, SS_CENTER | SS_CENTERIMAGE, s, x, 0, w, OH);
+        }
+    }
+
+    for (int i = 0; i + 1 < n; ++i) {
+        if (vertical) {
+            const int boundary = (btn[i].bottom + btn[i + 1].top) / 2 - ov.top;
+            AddStatic(g_overlay, g_inst, 0, TEXT(""),
+                      insetX, boundary - lineW / 2, OW - 2 * insetX, lineW, kSepId);
+        } else {
+            const int boundary = (btn[i].right + btn[i + 1].left) / 2 - ov.left;
+            AddStatic(g_overlay, g_inst, 0, TEXT(""),
+                      boundary - lineW / 2, insetY, lineW, OH - 2 * insetY, kSepId);
+        }
+    }
+
+    // Re-enable painting, make sure the window is visible (it may have been hidden
+    // during an empty period) and topmost, then repaint the whole bar once. Batching
+    // the child swap between WM_SETREDRAW FALSE/TRUE keeps the in-place refresh from
+    // flickering.
+    SendMessage(g_overlay, WM_SETREDRAW, TRUE, 0);
+    SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_NOREDRAW);
+    RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
+
+    // Update the button snapshot the timer compares against on the next tick.
+    g_snapN = n;
+    MoveMemory(g_snap, btn, sizeof(RECT) * n);
+}
+
+} // namespace
+

@@ -1,0 +1,57 @@
+// WinNumTip.rc2 - version-information resource (kept out of the main .rc so the
+// Visual Studio resource editor never rewrites it).
+//
+// The version numbers and copyright year are supplied by the build as RC preprocessor
+// defines (see the <ResourceCompile> block in WinNumTip.vcxproj), sourced from the
+// root Directory.Build.props ($(Version), $(DisplayVersion), $(CurrentYear)). The
+// #ifndef fallbacks below let the file still compile if built without the version
+// defines; APP_YEAR carries no fallback -- it is always injected by the build as the
+// current year ($(CurrentYear)).
+
+#include <windows.h>
+
+#ifndef APP_VER_COMMA
+#define APP_VER_COMMA 0,0,0,0          // FILEVERSION/PRODUCTVERSION (comma form)
+#endif
+#ifndef APP_VER_STR
+#define APP_VER_STR   0.0              // FileVersion string (DisplayVersion)
+#endif
+#ifndef APP_PROD_STR
+#define APP_PROD_STR  0.0.0.0          // ProductVersion string (full Version)
+#endif
+
+#define APP_STRINGIZE2(x) #x
+#define APP_STRINGIZE(x)  APP_STRINGIZE2(x)
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    APP_VER_COMMA
+ PRODUCTVERSION APP_VER_COMMA
+ FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+ FILEFLAGS      VS_FF_DEBUG
+#else
+ FILEFLAGS      0x0L
+#endif
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "000004B0"   // Language-neutral, Unicode
+        BEGIN
+            VALUE "CompanyName",      "Ivan Ivon (ivan.ivon@gmail.com)"
+            VALUE "FileDescription",  "Shows the Win+number (0..9) shortcut for each app pinned to the taskbar"
+            VALUE "FileVersion",      APP_STRINGIZE(APP_VER_STR)
+            VALUE "InternalName",     "WinNumTip"
+            VALUE "OriginalFilename", "WinNumTip.exe"
+            VALUE "ProductName",      "WinNumTip"
+            VALUE "ProductVersion",   APP_STRINGIZE(APP_PROD_STR)
+            VALUE "LegalCopyright",   "Copyright © " APP_STRINGIZE(APP_YEAR) " Ivan Ivon"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0000, 1200   // Language-neutral, Unicode (CP 1200)
+    END
+END

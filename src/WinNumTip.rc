@@ -1,0 +1,57 @@
+#include <windows.h>
+#include "resource.h"
+
+// Read this .rc (and its #included .rc2) as UTF-8 so non-ASCII glyphs like the
+// copyright sign below are decoded correctly regardless of the system code page.
+#pragma code_page(65001)
+
+/////////////////////////////////////////////////////////////////////////////
+// All resources use the language-neutral (invariant) culture.
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+/////////////////////////////////////////////////////////////////////////////
+// Application icon (first icon in the file -> used by Explorer / shortcuts).
+IDI_APPICON ICON "res\\WinNumTip.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+// Version information (numbers/year come from Directory.Build.props via RC defines).
+// Also provides the APP_STRINGIZE / APP_VER_STR / APP_YEAR macros used by the About
+// dialog below.
+#include "res\\WinNumTip.rc2"
+
+/////////////////////////////////////////////////////////////////////////////
+// Tray context menu
+IDR_TRAYMENU MENU
+BEGIN
+    POPUP "TrayContext"
+    BEGIN
+        MENUITEM "&About",     IDM_ABOUT
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",         IDM_EXIT
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// About dialog. The version and copyright year come from the same RC defines as
+// the version resource (APP_VER_STR / APP_YEAR, see res\WinNumTip.rc2).
+IDD_ABOUT DIALOGEX 0, 0, 232, 97
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About WinNumTip"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    ICON            IDI_APPICON,IDC_STATIC,7,7,20,20
+    LTEXT           APP_STRINGIZE(WinNumTip APP_VER_STR),IDC_ABOUT_NAME,36,7,189,10
+    CONTROL         "Shows the <a href=""https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec#taskbar"">Win+number (0..9) shortcut</a> for each app pinned to the taskbar.",IDC_ABOUT_DESC,"SysLink",WS_TABSTOP,36,20,189,18
+    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>   <a href=""https://github.com/i2van/WinNumTip/"">Project site</a>",IDC_ABOUT_LINK,"SysLink",WS_TABSTOP,36,43,189,10
+    LTEXT           APP_STRINGIZE(Copyright © APP_YEAR Ivan Ivon),IDC_STATIC,36,63,189,10
+    DEFPUSHBUTTON   "OK",IDOK,175,76,50,14
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// String table
+STRINGTABLE
+BEGIN
+    IDS_APPTITLE  "WinNumTip"
+    IDS_TOOLTIP   "Hold Win+number (0..9) to open the app pinned to the taskbar in that position, or switch to it if already running"
+    IDS_EXIT      "E&xit"
+END
