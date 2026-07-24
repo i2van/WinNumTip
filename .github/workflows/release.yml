@@ -1,0 +1,82 @@
+name: release
+
+# Publishes a GitHub Release whose tag/name come from <Version> in
+# Directory.Build.props (the same source the built binary is stamped from), with a
+# WinNumTip-<platform>.zip asset for every platform. Run it manually from the Actions
+# tab once Directory.Build.props has the version you want to ship.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the tag + release
+
+jobs:
+  # Reuse the CI build workflow to produce the WinNumTip-<platform> artifacts. Its
+  # jobs run in this same workflow run, so the release job below can download the
+  # artifacts it uploads.
+  build:
+    uses: ./.github/workflows/build.yml
+
+  release:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Read <Version> from Directory.Build.props and derive the release version by
+      # dropping a single trailing ".0" -- matching the project's $(DisplayVersion)
+      # (e.g. 1.0.0.0 -> 1.0.0). The tag is that value prefixed with "v" (v1.0.0).
+      - name: Resolve version from Directory.Build.props
+        id: ver
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $raw = ($props.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+          if (-not $raw) { throw "No <Version> found in Directory.Build.props" }
+          $display = $raw -replace '\.0$',''
+          "version=$display"     >> $env:GITHUB_OUTPUT
+          "tag=v$display"        >> $env:GITHUB_OUTPUT
+          Write-Host "Version $raw -> tag v$display"
+
+      # Each artifact was uploaded under its own name, so this lands as
+      # artifacts/WinNumTip-<platform>/WinNumTip.exe.
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Pack every platform's WinNumTip.exe into WinNumTip-<platform>.zip.
+      - name: Package release zips
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Get-ChildItem artifacts -Directory | ForEach-Object {
+            $zip = Join-Path dist "$($_.Name).zip"
+            Compress-Archive -Path (Join-Path $_.FullName '*') -DestinationPath $zip -Force
+            Write-Host "Packed $zip"
+          }
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag    = "${{ steps.ver.outputs.tag }}"
+          $assets = (Get-ChildItem dist\*.zip).FullName
+
+          # Prepend a commit diff (compare) link to the auto-generated notes when a
+          # previous release exists. The first release has nothing to diff against, so
+          # the link is omitted ("if avail"). gh prepends --notes to --generate-notes.
+          $prev = gh release view --json tagName --jq '.tagName' 2>$null
+          if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($prev)) {
+            $prev    = "$prev".Trim()
+            $compare = "https://github.com/$env:GITHUB_REPOSITORY/compare/$prev...$tag"
+            $notes   = @('--notes', "**Commit diff:** $compare")
+            Write-Host "Including commit diff link: $compare"
+          } else {
+            $notes = @()
+            Write-Host "No previous release; commit diff link omitted."
+          }
+
+          gh release create $tag $assets --title $tag --generate-notes $notes

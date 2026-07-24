@@ -1,0 +1,46 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  workflow_call:   # reused by release.yml to build the release binaries
+
+permissions:
+  contents: read
+
+env:
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ x64, Win32, ARM64 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build
+        run: >-
+          msbuild WinNumTip.slnx
+          /nologo /m
+          /p:Configuration=${{ env.BUILD_CONFIGURATION }}
+          /p:Platform=${{ matrix.platform }}
+
+      # actions/upload-artifact stores the file(s) under the given 'name' and serves
+      # them as a single <name>.zip on download, so the artifact is WinNumTip-<platform>.zip.
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinNumTip-${{ matrix.platform }}
+          path: build/${{ matrix.platform }}/${{ env.BUILD_CONFIGURATION }}/WinNumTip.exe
+          if-no-files-found: error
