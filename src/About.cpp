@@ -12,18 +12,18 @@ HFONT g_boldFont = nullptr;
 
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
-    HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
+    const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
 
     // Give the dialog the app icon: it is owned by the hidden tool window (which has no
     // class icon), so without this Alt+Tab / the taskbar show the generic default icon.
-    HICON iconBig   = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXICON),   GetSystemMetrics(SM_CYICON),   LR_SHARED));
-    HICON iconSmall = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+    const HICON iconBig   = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXICON),   GetSystemMetrics(SM_CYICON),   LR_SHARED));
+    const HICON iconSmall = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
     if (iconBig)   SendMessage(dlg, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(iconBig));
     if (iconSmall) SendMessage(dlg, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(iconSmall));
 
     // Bold the app-name header: derive a bold copy of the dialog's own (already
     // DPI-scaled) font so the weight change keeps the same face and size.
-    HFONT base = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0));
+    const HFONT base = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0));
     LOGFONT lf;
     if (base && GetObject(base, sizeof(lf), &lf)) {
         lf.lfWeight = FW_BOLD;
@@ -47,7 +47,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     // <a href="..."> markup (see IDD_ABOUT).
     if ((idCtrl == IDC_ABOUT_DESC || idCtrl == IDC_ABOUT_LINK) &&
         (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-        PNMLINK link = reinterpret_cast<PNMLINK>(hdr);
+        const PNMLINK link = reinterpret_cast<PNMLINK>(hdr);
         VERIFY_SHELLEXEC(ShellExecute(dlg, TEXT("open"), link->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL));
 
         return TRUE;

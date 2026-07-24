@@ -62,9 +62,9 @@ bool HandleTaskbarCreated(UINT msg) {
 }
 
 void ShowMenu(HINSTANCE inst, HWND hwnd) {
-    HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_TRAYMENU));
+    const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_TRAYMENU));
     if (!menu) return;
-    HMENU sub = GetSubMenu(menu, 0);
+    const HMENU sub = GetSubMenu(menu, 0);
     POINT pt;
     GetCursorPos(&pt);
     SetForegroundWindow(hwnd); // required so the menu dismisses correctly
