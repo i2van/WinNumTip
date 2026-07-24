@@ -12,12 +12,10 @@
 #include "KeyboardHook.h"
 #include "About.h"
 
-// windowsx-style message crackers for the custom WM_SHOW_WINNUMTIP / WM_TRAYICON
-// messages, so they can be dispatched with HANDLE_MSG just like the standard ones.
-// Kept here as this is the only translation unit that dispatches them.
-//   WM_SHOW_WINNUMTIP handler signature: void fn(HWND hwnd, BOOL show)
+// windowsx-style message cracker for the custom WM_TRAYICON message, so it can be
+// dispatched with HANDLE_MSG just like the standard ones. Kept here as this is the
+// only translation unit that dispatches it.
 //   WM_TRAYICON handler signature:       void fn(HWND hwnd, UINT mouseMsg)
-#define HANDLE_WM_SHOW_WINNUMTIP(hwnd, wParam, lParam, fn) ((fn)((hwnd), (BOOL)(wParam)), 0L)
 #define HANDLE_WM_TRAYICON(hwnd, wParam, lParam, fn) ((fn)((hwnd), (UINT)LOWORD(lParam)), 0L)
 
 namespace {
@@ -26,12 +24,18 @@ LPCTSTR const kMsgClass = TEXT("WinNumTipMsg") APP_GUID;
 // Single-instance mutex name; the shared app GUID keeps it globally unique.
 LPCTSTR const kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
 
+// Persistent poll that drives the overlay from the keyboard hook's atomic flag.
+// Runs on the message window for the whole app lifetime (not just while shown), so a
+// Win-down is always picked up and the state self-heals every tick.
+constexpr UINT_PTR kPollTimer = 1;
+constexpr UINT     kPollMs     = 75;
+
 HINSTANCE      g_inst   = nullptr;
 HWND           g_msgWnd = nullptr;
 IUIAutomation* g_uia    = nullptr;
 
 // Standard messages are dispatched through the windowsx.h HANDLE_MSG crackers;
-// WM_TRAYICON / WM_SHOW_WINNUMTIP are custom (WM_APP-based) messages handled directly.
+// WM_TRAYICON is a custom (WM_APP-based) message handled the same way.
 void OnCommand(HWND hwnd, int id, HWND /*ctl*/, UINT /*notify*/) {
     switch (id) {
         case IDM_ABOUT: About::Show(g_inst, hwnd); break;
@@ -44,15 +48,22 @@ void OnDestroy(HWND /*hwnd*/) {
     PostQuitMessage(0);
 }
 
+// Persistent poll (kPollTimer): reconcile the desired overlay visibility from the
+// hook's atomic flag + live key state and apply it. Show/Hide are idempotent, so this
+// is cheap when nothing changes and re-attempts Show if a previous create failed.
+void OnTimer(HWND /*hwnd*/, UINT id) {
+    if (id != kPollTimer) return;
+    if (KeyboardHook::ShouldShow()) Overlay::Show(g_uia, g_inst);
+    else                            Overlay::Hide();
+}
+
 LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     // "TaskbarCreated" is a runtime-registered broadcast (Explorer restart), so it
     // can't be a HANDLE_MSG case label; handle it before the switch.
     if (NotifyIcon::HandleTaskbarCreated(msg)) return 0;
 
     switch (msg) {
-        HANDLE_MSG(hwnd, WM_SHOW_WINNUMTIP, [](HWND /*hwnd*/, BOOL show) {
-            if (show) Overlay::Show(g_uia, g_inst); else Overlay::Hide();
-        });
+        HANDLE_MSG(hwnd, WM_TIMER, OnTimer);
         HANDLE_MSG(hwnd, WM_TRAYICON, [](HWND h, UINT mouse) {
             if (mouse == WM_RBUTTONUP || mouse == WM_LBUTTONUP || mouse == WM_CONTEXTMENU)
                 NotifyIcon::ShowMenu(g_inst, h);
@@ -105,7 +116,9 @@ extern "C" void Entry() {
                               0, 0, 0, 0, nullptr, nullptr, g_inst, nullptr);
     VERIFY(g_msgWnd != nullptr);
     NotifyIcon::Add(g_inst, g_msgWnd);
-    VERIFY(KeyboardHook::Install(g_inst, g_msgWnd));
+    VERIFY(KeyboardHook::Install(g_inst));
+    // Drive the overlay by polling the hook's atomic flag + live key state.
+    VERIFY(SetTimer(g_msgWnd, kPollTimer, kPollMs, nullptr));
 
     MSG m;
     while (GetMessage(&m, nullptr, 0, 0) > 0) {

@@ -17,12 +17,10 @@
 #include <uiautomation.h>  // IUIAutomation (taskbar button rects)
 #include <commctrl.h>   // SysLink control (NMLINK) + InitCommonControlsEx
 
-// Custom application messages, shared between the modules that post them (the
-// keyboard hook / tray icon) and the message window that dispatches them. Defined as
-// macros (not namespaced constants) so the windowsx.h HANDLE_MSG cracker can
-// token-paste HANDLE_##message and use them as a switch's case labels.
+// Custom application message posted by the shell to the message window and dispatched
+// there. Defined as a macro (not a namespaced constant) so the windowsx.h HANDLE_MSG
+// cracker can token-paste HANDLE_##message and use it as a switch's case label.
 #define WM_TRAYICON       (WM_APP + 1)   // tray icon callback
-#define WM_SHOW_WINNUMTIP (WM_APP + 2)   // hook -> set overlay visibility (wParam: 1=show, 0=hide)
 
 // A single app-wide GUID appended to every unique, globally-named resource this
 // process creates (window classes, the single-instance mutex, and any future

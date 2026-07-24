@@ -1,7 +1,6 @@
 #include "stdafx.h"
 #include "Overlay.h"
 #include "Taskbar.h"
-#include "Keyboard.h"
 
 namespace {
 
@@ -35,15 +34,6 @@ int            g_snapN = 0;                     // button count captured when th
 RECT           g_snap[kMaxBadges];              // button rects captured when the bar was built
 constexpr UINT_PTR kRefreshTimer = 1;
 constexpr UINT     kRefreshMs    = 200;
-
-// Safety-net self-heal for the rare case where a Win key-up is never delivered to the
-// hook at all (e.g. Win+L switching to the secure desktop). The refresh timer hides
-// the bar once the Windows key has read released for this many consecutive ticks. The
-// hook already handles normal and injected releases, so this only needs to catch a
-// fully stuck bar; the multi-tick debounce keeps a transient key-state blip during a
-// Win+<key> chord from hiding the bar while Win is still physically held.
-constexpr int  kWinUpTicksToHide = 5;   // ~1s at kRefreshMs
-int            g_winUpTicks      = 0;
 
 // Forward decls. Refresh() rebuilds the bar's contents in place for the current
 // taskbar; while a session is active the overlay window and its timer persist, so
@@ -110,22 +100,13 @@ HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
 //   handler signature: void fn(HWND hwnd, HDC hdc)
 #define HANDLE_WM_PRINTCLIENT(hwnd, wParam, lParam, fn) ((fn)((hwnd), (HDC)(wParam)), 0L)
 
-// WM_TIMER: while a session is active, first make sure the Windows key is still
-// physically down -- if a Win key-up was missed (it can be swallowed or delivered as
-// injected during Win+<key> chords), self-hide so the bar never lingers with Win
-// released. Otherwise re-collect the taskbar buttons and rebuild the bar if they
-// changed, so numbers stay aligned when a button appears/disappears without waiting
-// for the Win key to be released.
+// WM_TIMER: re-collect the taskbar buttons and rebuild the bar in place if they
+// changed, so numbers stay aligned when a button appears/disappears (or the bar
+// recovers from a momentarily empty taskbar) without waiting for the Win key to be
+// released. Overlay visibility itself is owned by the message window's poll
+// (KeyboardHook::ShouldShow), so this timer only refreshes contents, never hides.
 void OnTimer(HWND /*hwnd*/, UINT id) {
     if (id != kRefreshTimer) return;
-
-    const bool winDown = Keyboard::IsWinDown();
-    g_winUpTicks = winDown ? 0 : g_winUpTicks + 1;
-    if (g_winUpTicks >= kWinUpTicksToHide) {
-        Overlay::Hide();
-
-        return;
-    }
 
     RECT cur[kMaxBadges];
     const int m = CollectCurrent(cur, kMaxBadges);
@@ -157,7 +138,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 // (kSepId) from labels (0) for WM_CTLCOLORSTATIC.
 void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
                int x, int y, int w, int h, int id = 0) {
-    HWND s = CreateWindowEx(0, TEXT("STATIC"), text,
+    const HWND s = CreateWindowEx(0, TEXT("STATIC"), text,
                             WS_CHILD | WS_VISIBLE | style,
                             x, y, w, h, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     if (s && g_font) SetWindowFont(s, g_font, FALSE);
@@ -172,11 +153,11 @@ void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
 // separator color.
 [[nodiscard]] COLORREF SampleBarColor(HTHEME theme, int part, int w, int h) {
     if (!theme || w <= 0 || h <= 0) return CLR_INVALID;
-    HDC screen = GetDC(nullptr);
-    HDC mem = CreateCompatibleDC(screen);
-    HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
-    HGDIOBJ old = SelectObject(mem, bmp);
-    RECT rc = { 0, 0, w, h };
+    const HDC screen = GetDC(nullptr);
+    const HDC mem = CreateCompatibleDC(screen);
+    const HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
+    const HGDIOBJ old = SelectObject(mem, bmp);
+    const RECT rc = { 0, 0, w, h };
     DrawThemeBackground(theme, mem, part, 0, &rc, nullptr);
     const COLORREF c = GetPixel(mem, w / 2, h / 2);
     SelectObject(mem, old);
@@ -231,8 +212,10 @@ void Shutdown() {
 }
 
 // Fully tear down the overlay session (called on Win release). Destroys the window
-// (and its timer + child controls) and releases the per-show resources.
+// (and its timer + child controls) and releases the per-show resources. Idempotent:
+// a no-op when nothing is shown, so the persistent poll can call it every tick.
 void Hide() {
+    if (!g_active && !g_overlay) return;
     g_active = false;
     if (g_overlay) {
         DestroyWindow(g_overlay);   // also destroys the child STATIC controls + timer
@@ -250,7 +233,6 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     if (g_active) return;   // already in a session; refreshes go through the timer
     g_uia = uia;
     g_inst = inst;
-    g_winUpTicks = 0;
     if (!g_overlay) {
         g_overlay = CreateOverlayWindow(inst);
         if (!g_overlay) return;
@@ -265,7 +247,7 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
 namespace {
 
 int CollectCurrent(RECT* out, int max) {
-    HWND tray = Taskbar::Find();
+    const HWND tray = Taskbar::Find();
     if (!tray || Taskbar::Obscured(tray)) return 0;
 
     return Taskbar::CollectButtonRects(g_uia, tray, out, max);
@@ -292,7 +274,7 @@ void Refresh() {
     const int n = CollectCurrent(btn, kMaxBadges);
     if (n == 0) { ApplyEmpty(); return; }
 
-    HWND tray = Taskbar::Find();
+    const HWND tray = Taskbar::Find();
     RECT tr;
     UINT edge;
     if (!tray || !Taskbar::GetPos(tr, edge)) { ApplyEmpty(); return; }
