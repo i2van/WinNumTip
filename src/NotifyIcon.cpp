@@ -66,11 +66,11 @@ void ShowMenu(HINSTANCE inst, HWND hwnd) {
     if (!menu) return;
     const HMENU sub = GetSubMenu(menu, 0);
     POINT pt;
-    GetCursorPos(&pt);
+    VERIFY(GetCursorPos(&pt));
     SetForegroundWindow(hwnd); // required so the menu dismisses correctly
     TrackPopupMenu(sub, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
     PostMessage(hwnd, WM_NULL, 0, 0);
-    DestroyMenu(menu);
+    VERIFY(DestroyMenu(menu));
 }
 
 } // namespace NotifyIcon

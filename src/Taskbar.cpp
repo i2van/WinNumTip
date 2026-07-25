@@ -3,7 +3,7 @@
 
 namespace {
 
-LPCTSTR const kTaskButtonClass = TEXT("Taskbar.TaskListButtonAutomationPeer");
+constexpr LPCTSTR kTaskButtonClass = TEXT("Taskbar.TaskListButtonAutomationPeer");
 
 // Collect the non-degenerate bounding rectangles of every element under 'root' that
 // matches 'cond', writing up to 'max' of them to 'out' (in tree order == Win+0..9).

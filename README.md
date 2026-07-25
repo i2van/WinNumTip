@@ -21,6 +21,12 @@ position - **WinNumTip** just reminds you which number is which.
 
 - Numbered badges over taskbar buttons while the `Win` key is held.
 - Works with the taskbar docked on any edge (bottom, top, left, right).
+- Adjustable badge size via the tray icon's **Preferences** dialog - from the
+  default slim strip up to the full taskbar-button size (label height for a
+  horizontal taskbar, label width for a vertical one); the numbers scale to match.
+- **Invert colors** option (same dialog) that swaps the strip and number colors for
+  a highlighted look.
+- Preferences are saved next to the app in `WinNumTip.ini`.
 
 ## Requirements
 

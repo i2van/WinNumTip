@@ -1,57 +1,175 @@
-#include <windows.h>
+// Microsoft Visual C++ generated resource script.
+//
 #include "resource.h"
 
-// Read this .rc (and its #included .rc2) as UTF-8 so non-ASCII glyphs like the
-// copyright sign below are decoded correctly regardless of the system code page.
-#pragma code_page(65001)
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include "winres.h"
+#undef APSTUDIO_HIDDEN_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// All resources use the language-neutral (invariant) culture.
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// Neutral resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_NEU)
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+#pragma code_page(1252)
 
 /////////////////////////////////////////////////////////////////////////////
-// Application icon (first icon in the file -> used by Explorer / shortcuts).
-IDI_APPICON ICON "res\\WinNumTip.ico"
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_APPICON             ICON                    "res\\WinNumTip.ico"
+
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#define APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "#include ""winres.h""\r\n"
+    "#undef APSTUDIO_HIDDEN_SYMBOLS\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#include ""res\\WinNumTip.rc2""\r\n"
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
 
 /////////////////////////////////////////////////////////////////////////////
-// Version information (numbers/year come from Directory.Build.props via RC defines).
-// Also provides the APP_STRINGIZE / APP_VER_STR / APP_YEAR macros used by the About
-// dialog below.
-#include "res\\WinNumTip.rc2"
+//
+// Menu
+//
 
-/////////////////////////////////////////////////////////////////////////////
-// Tray context menu
 IDR_TRAYMENU MENU
 BEGIN
     POPUP "TrayContext"
     BEGIN
-        MENUITEM "&About",     IDM_ABOUT
+        MENUITEM "&Preferences...",             IDM_PREFERENCES
+        MENUITEM "&About",                      IDM_ABOUT
         MENUITEM SEPARATOR
-        MENUITEM "E&xit",         IDM_EXIT
+        MENUITEM "E&xit",                       IDM_EXIT
     END
 END
 
+
 /////////////////////////////////////////////////////////////////////////////
-// About dialog. The version and copyright year come from the same RC defines as
-// the version resource (APP_VER_STR / APP_YEAR, see res\WinNumTip.rc2).
+//
+// Dialog
+//
+
 IDD_ABOUT DIALOGEX 0, 0, 232, 97
-STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "About WinNumTip"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     ICON            IDI_APPICON,IDC_STATIC,7,7,20,20
-    LTEXT           APP_STRINGIZE(WinNumTip APP_VER_STR),IDC_ABOUT_NAME,36,7,189,10
-    CONTROL         "Shows the <a href=""https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec#taskbar"">Win+number (0..9) shortcut</a> for each app pinned to the taskbar.",IDC_ABOUT_DESC,"SysLink",WS_TABSTOP,36,20,189,18
-    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>   <a href=""https://github.com/i2van/WinNumTip/"">Project site</a>",IDC_ABOUT_LINK,"SysLink",WS_TABSTOP,36,43,189,10
-    LTEXT           APP_STRINGIZE(Copyright Â© APP_YEAR Ivan Ivon),IDC_STATIC,36,63,189,10
+    LTEXT           "WinNumTip %s",IDC_ABOUT_NAME,36,7,189,10
+    CONTROL         "Shows the <a href=""https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec#taskbar"">Win+number (0..9) shortcut</a> for each app pinned to the taskbar.",IDC_ABOUT_DESC,
+                    "SysLink",WS_TABSTOP,36,20,189,18
+    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>   <a href=""https://github.com/i2van/WinNumTip/"">Project site</a>",IDC_ABOUT_LINK,
+                    "SysLink",WS_TABSTOP,36,43,189,10
+    LTEXT           "Copyright © %s Ivan Ivon",IDC_ABOUT_COPYRIGHT,36,63,189,10
+    CONTROL         "<a>Preferences</a>",IDC_ABOUT_PREFS,"SysLink",WS_TABSTOP,36,79,60,10
     DEFPUSHBUTTON   "OK",IDOK,175,76,50,14
 END
 
+IDD_PREFERENCES DIALOGEX 0, 0, 232, 112
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "WinNumTip Preferences"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Label &size:",IDC_SIZE_LABEL,7,9,32,10
+    LTEXT           "Default",IDC_SIZE_VALUE,39,9,40,10
+    CONTROL         "",IDC_SIZE_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,23,218,26
+    LTEXT           "Default",IDC_STATIC,7,50,80,9
+    RTEXT           "Taskbar button",IDC_STATIC,135,50,90,9
+    CONTROL         "&Invert colors",IDC_INVERT,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,68,150,10
+    CONTROL         "<a>Reset to defaults</a>",IDC_RESET,"SysLink",WS_GROUP | WS_TABSTOP,7,94,100,10
+    DEFPUSHBUTTON   "OK",IDOK,121,91,50,14,WS_GROUP
+    PUSHBUTTON      "Cancel",IDCANCEL,175,91,50,14
+END
+
+
 /////////////////////////////////////////////////////////////////////////////
-// String table
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_ABOUT, DIALOG
+    BEGIN
+    END
+
+    IDD_PREFERENCES, DIALOG
+    BEGIN
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_PREFERENCES AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
 STRINGTABLE
 BEGIN
-    IDS_APPTITLE  "WinNumTip"
-    IDS_TOOLTIP   "Hold Win+number (0..9) to open the app pinned to the taskbar in that position, or switch to it if already running"
-    IDS_EXIT      "E&xit"
+    IDS_APPTITLE            "WinNumTip"
+    IDS_TOOLTIP             "Hold Win+number (0..9) to open the app pinned to the taskbar in that position, or switch to it if already running"
+    IDS_EXIT                "E&xit"
 END
+
+#endif    // Neutral resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#include "res\WinNumTip.rc2"
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

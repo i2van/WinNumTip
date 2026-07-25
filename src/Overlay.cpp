@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Overlay.h"
+#include "Preferences.h"
 #include "Taskbar.h"
 
 namespace {
@@ -21,6 +22,8 @@ HFONT    g_font      = nullptr;
 bool     g_ownFont   = false;                  // true when g_font must be DeleteObject'd (not a stock font)
 HTHEME   g_theme     = nullptr;
 HBRUSH   g_lineBrush = nullptr;                 // solid brush that paints the separator lines
+HBRUSH   g_bgBrush   = nullptr;                 // solid strip-fill brush, only in invert-colors mode
+bool     g_invert    = false;                   // true when the strip/number colors are swapped
 int      g_bgPart    = TBP_BACKGROUNDBOTTOM;   // taskbar background part for the docked edge
 COLORREF g_textColor = 0;                      // resolved from the theme / system colors in Show
 bool     g_active    = false;                  // true between Show (Win down) and Hide (Win up)
@@ -57,16 +60,34 @@ void FreeResources() {
     if (g_theme) { CloseThemeData(g_theme); g_theme = nullptr; }
     if (g_font)  { if (g_ownFont) DeleteObject(g_font); g_font = nullptr; g_ownFont = false; }
     if (g_lineBrush) { DeleteObject(g_lineBrush); g_lineBrush = nullptr; }
+    if (g_bgBrush) { DeleteObject(g_bgBrush); g_bgBrush = nullptr; }
 }
 
-// Paint the bar background with the taskbar theme (falls back to the 3D face color
-// when the theme is unavailable, e.g. classic mode). Used from both WM_ERASEBKGND
-// and WM_PRINTCLIENT so DrawThemeParentBackground can show it behind the labels.
+// Compute the label-size bounds for a taskbar at 'tr' docked on 'edge' at 'dpi': the slim
+// default strip thickness and the full taskbar-button thickness, both along the axis
+// perpendicular to the taskbar. The button thickness is taken from the taskbar's own
+// cross-axis extent (side buttons span its full width; top/bottom buttons are about its
+// height), so the renderer and the Preferences dialog agree on 0..100% without the dialog
+// needing UI Automation. 'vertical' is set for a side-docked (left/right) taskbar.
+void ComputeStripBounds(const RECT& tr, UINT edge, UINT dpi,
+                        int& defThick, int& btnThick, bool& vertical) {
+    vertical = edge == ABE_LEFT || edge == ABE_RIGHT;
+    btnThick = vertical ? (tr.right - tr.left) : (tr.bottom - tr.top);
+    const int menu = GetSystemMetricsForDpi(vertical ? SM_CXMENUSIZE : SM_CYMENUSIZE, dpi);
+    defThick = (btnThick > 0 && menu > btnThick) ? btnThick : menu;
+}
+
+
+// Paint the bar background: in invert-colors mode a solid fill with the number color;
+// otherwise the taskbar theme (falling back to the 3D face color when the theme is
+// unavailable, e.g. classic mode). Used from both WM_ERASEBKGND and WM_PRINTCLIENT so
+// DrawThemeParentBackground can show it behind the labels.
 void PaintBackground(HWND hwnd, HDC hdc) {
     RECT rc;
     GetClientRect(hwnd, &rc);
-    if (g_theme) DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
-    else         FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1));
+    if (g_invert && g_bgBrush) FillRect(hdc, &rc, g_bgBrush);
+    else if (g_theme)          DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
+    else                       FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1));
 }
 
 // WM_ERASEBKGND / WM_PRINTCLIENT: paint the themed bar background.
@@ -168,6 +189,15 @@ void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
     return c;
 }
 
+// ITU-R BT.601 luma weights (summing to kLumaScale) that reduce a color to its perceived
+// brightness, and the midpoint of the 0..255 luminance range at which the contrasting
+// text color flips between the light and dark system colors.
+constexpr int kLumaWeightR  = 299;
+constexpr int kLumaWeightG  = 587;
+constexpr int kLumaWeightB  = 114;
+constexpr int kLumaScale    = 1000;
+constexpr int kLumaMidpoint = 128;
+
 // Contrasting number-text color for the given bar background: prefer the theme's own
 // text color, else pick the light/dark system text color by background luminance.
 [[nodiscard]] COLORREF PickTextColor(HTHEME theme, int part, COLORREF bar) {
@@ -175,9 +205,10 @@ void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
     if (theme && SUCCEEDED(GetThemeColor(theme, part, 0, TMT_TEXTCOLOR, &themed)))
         return themed;
     if (bar == CLR_INVALID) return GetSysColor(COLOR_WINDOWTEXT);
-    const int lum = (GetRValue(bar) * 299 + GetGValue(bar) * 587 + GetBValue(bar) * 114) / 1000;
+    const int lum = (GetRValue(bar) * kLumaWeightR + GetGValue(bar) * kLumaWeightG +
+                     GetBValue(bar) * kLumaWeightB) / kLumaScale;
 
-    return lum < 128 ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT);
+    return lum < kLumaMidpoint ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT);
 }
 
 // Separator color: the midpoint between the text color and the bar background, so the
@@ -242,6 +273,20 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     Refresh();
 }
 
+// Report the current taskbar's label-size bounds (see Overlay.h). Shares
+// ComputeStripBounds with the renderer so the dialog's percentages map to the same
+// thicknesses the bar will draw. No UI Automation needed -- the bounds come from the
+// taskbar's own geometry.
+bool LabelSizeBounds(int& defThick, int& btnThick, bool& vertical) {
+    const HWND tray = Taskbar::Find();
+    RECT tr;
+    UINT edge;
+    if (!tray || !Taskbar::GetPos(tr, edge)) return false;
+    const UINT dpi = GetDpiForWindow(tray) ? GetDpiForWindow(tray) : USER_DEFAULT_SCREEN_DPI;
+    ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
+    return true;
+}
+
 } // namespace Overlay
 
 namespace {
@@ -279,21 +324,25 @@ void Refresh() {
     UINT edge;
     if (!tray || !Taskbar::GetPos(tr, edge)) { ApplyEmpty(); return; }
 
-    // Bar thickness comes from the DPI-aware menu-bar button height; for a side-docked
-    // taskbar the label width uses the matching menu-bar button width (never wider than
-    // the narrowest taskbar button) so the bar stays a slim strip.
+    // Strip thickness (perpendicular to the taskbar) from the shared bounds: a slim
+    // default up to a full taskbar-button-sized cell. The "Label size" preference is the
+    // percentage of that full button thickness (Preferences::LabelSizePercent), clamped so
+    // the strip is never thinner than the default -- the dialog only offers percentages at
+    // or above the default's share, so every selectable value visibly changes the strip.
     const UINT dpi = GetDpiForWindow(tray) ? GetDpiForWindow(tray) : USER_DEFAULT_SCREEN_DPI;
-    const int BH = GetSystemMetricsForDpi(SM_CYMENUSIZE, dpi);
-    int minBtnW = tr.right - tr.left;
-    for (int i = 0; i < n; ++i) {
-        const int w = btn[i].right - btn[i].left;
-        if (w > 0 && w < minBtnW) minBtnW = w;
-    }
-    int bw = GetSystemMetricsForDpi(SM_CXMENUSIZE, dpi);
-    if (bw > minBtnW) bw = minBtnW;
-    const int BW = bw;
+    int defThick, btnThick;
+    bool vertical;
+    ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
 
-    const bool vertical = edge == ABE_LEFT || edge == ABE_RIGHT;
+    int p = Preferences::LabelSizePercent();
+    if (p < Preferences::kMinPercent) p = Preferences::kMinPercent;
+    else if (p > Preferences::kMaxPercent) p = Preferences::kMaxPercent;
+    int thick = MulDiv(btnThick, p, Preferences::kMaxPercent);
+    if (thick < defThick) thick = defThick;
+    else if (thick > btnThick) thick = btnThick;
+
+    const int BH = vertical ? 0 : thick;
+    const int BW = vertical ? thick : 0;
 
     // One continuous strip spanning from the first to the last taskbar button along
     // the taskbar's long axis, laid just OUTSIDE the taskbar's inner edge so it sits
@@ -328,15 +377,44 @@ void Refresh() {
                  SWP_NOACTIVATE | SWP_NOREDRAW);
 
     g_theme = OpenThemeData(g_overlay, TEXT("TaskBar"));
-    const COLORREF barColor = SampleBarColor(g_theme, g_bgPart, OW, OH);
-    g_textColor = PickTextColor(g_theme, g_bgPart, barColor);
+    const COLORREF barColor  = SampleBarColor(g_theme, g_bgPart, OW, OH);
+    const COLORREF textColor = PickTextColor(g_theme, g_bgPart, barColor);
 
-    // Shell/taskbar UI font (SPI_GETNONCLIENTMETRICS, DPI-aware) so the numbers
-    // match the taskbar's own text; fall back to the system default GUI font.
+    // Invert-colors mode swaps the roles of the bar and number colors: the strip is
+    // filled solid with the number (text) color and the numbers are drawn in the bar
+    // color, giving a highlighted look. The fill is cached in a brush for PaintBackground;
+    // in normal mode the themed taskbar background is painted instead.
+    g_invert = Preferences::InvertColors();
+    if (g_invert) {
+        g_textColor = barColor != CLR_INVALID ? barColor : GetSysColor(COLOR_3DFACE);
+        g_bgBrush   = CreateSolidBrush(textColor);
+    } else {
+        g_textColor = textColor;
+    }
+
+    // Shell/taskbar UI font (SPI_GETNONCLIENTMETRICS, DPI-aware) so the numbers match the
+    // taskbar's own text; fall back to the system default GUI font. When the "Label size"
+    // preference has grown the strip past the default, the font is scaled up by the same
+    // ratio so the numbers grow to fill the larger cell -- capped to the cell's fixed
+    // cross extent (button width for a horizontal bar, button height for a vertical one)
+    // so a digit never overflows the dimension that the strip does not grow.
     NONCLIENTMETRICS ncm;
     ZeroMemory(&ncm, sizeof(ncm));
     ncm.cbSize = sizeof(ncm);
     if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi)) {
+        if (defThick > 0 && thick > defThick) {
+            LOGFONT* const lf = &ncm.lfMessageFont;
+            const int base = lf->lfHeight < 0 ? -lf->lfHeight : lf->lfHeight;
+            int scaled = MulDiv(base, thick, defThick);
+            int cross = vertical ? (btn[0].bottom - btn[0].top) : (btn[0].right - btn[0].left);
+            for (int i = 1; i < n; ++i) {
+                const int c = vertical ? (btn[i].bottom - btn[i].top) : (btn[i].right - btn[i].left);
+                if (c > 0 && c < cross) cross = c;
+            }
+            if (cross > 0 && scaled > cross) scaled = cross;
+            if (scaled < 1) scaled = 1;
+            lf->lfHeight = lf->lfHeight < 0 ? -scaled : scaled;
+        }
         g_font = CreateFontIndirect(&ncm.lfMessageFont);
         g_ownFont = g_font != nullptr;
     }
@@ -352,15 +430,16 @@ void Refresh() {
     // WM_CTLCOLORSTATIC): a neutral divider midway between the text and bar colors so
     // it is clearly visible yet softer than the numbers. Its thickness comes from the
     // system border metric and it is inset from the bar ends by the fixed window-frame
-    // metric, so both scale with DPI.
-    g_lineBrush = CreateSolidBrush(PickSeparatorColor(g_textColor, barColor));
+    // metric, so both scale with DPI. The midpoint uses the true text/bar colors, so it
+    // stays balanced whether or not the colors are inverted.
+    g_lineBrush = CreateSolidBrush(PickSeparatorColor(textColor, barColor));
     const int lineW  = max(1, GetSystemMetricsForDpi(SM_CXBORDER, dpi));
     const int insetX = GetSystemMetricsForDpi(SM_CXFIXEDFRAME, dpi);
     const int insetY = GetSystemMetricsForDpi(SM_CYFIXEDFRAME, dpi);
 
     for (int i = 0; i < n; ++i) {
         TCHAR s[2];
-        s[0] = i < 9 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
+        s[0] = i < kMaxBadges - 1 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
         s[1] = 0;
         if (vertical) {
             const int y = btn[i].top - ov.top;
@@ -400,4 +479,3 @@ void Refresh() {
 }
 
 } // namespace
-

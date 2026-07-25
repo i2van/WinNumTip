@@ -8,7 +8,10 @@ namespace Keyboard {
 // injected up sent during Win+<key> chords, and the refresh timer polls it to self-heal
 // when a Win key-up is never delivered.
 [[nodiscard]] inline bool IsWinDown() {
-    return GetAsyncKeyState(VK_LWIN) & 0x8000 || GetAsyncKeyState(VK_RWIN) & 0x8000;
+    // GetAsyncKeyState sets this high-order bit in its result while the key is physically down.
+    constexpr int kKeyDownBit = 0x8000;
+
+    return GetAsyncKeyState(VK_LWIN) & kKeyDownBit || GetAsyncKeyState(VK_RWIN) & kKeyDownBit;
 }
 
 } // namespace Keyboard

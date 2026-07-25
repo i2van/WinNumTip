@@ -74,6 +74,9 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- The About dialog fills its "%s" version/year placeholders at runtime from
+           these (same numbers as the version resource; see res\WinNumTip.rc2). -->
+      <PreprocessorDefinitions>APP_VER_STR=$(DisplayVersion);APP_YEAR=$(CurrentYear);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!-- No CRT: skip the stack-checking helper (__chkstk lives in the CRT). -->
       <AdditionalOptions>/Gs9999999 %(AdditionalOptions)</AdditionalOptions>
       <!-- Precompiled header. -->
@@ -140,6 +143,9 @@
     <ClInclude Include="KeyboardHook.h" />
     <ClInclude Include="Keyboard.h" />
     <ClInclude Include="About.h" />
+    <ClInclude Include="DialogIcon.h" />
+    <ClInclude Include="Preferences.h" />
+    <ClInclude Include="PreferencesDialog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -151,6 +157,9 @@
     <ClCompile Include="KeyboardHook.cpp" />
     <ClCompile Include="WinNumTip.cpp" />
     <ClCompile Include="About.cpp" />
+    <ClCompile Include="DialogIcon.cpp" />
+    <ClCompile Include="Preferences.cpp" />
+    <ClCompile Include="PreferencesDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinNumTip.rc" />

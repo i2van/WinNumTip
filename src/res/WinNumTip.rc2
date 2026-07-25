@@ -8,7 +8,9 @@
 // defines; APP_YEAR carries no fallback -- it is always injected by the build as the
 // current year ($(CurrentYear)).
 
-#include <windows.h>
+// The version/style symbols (VS_VERSION_INFO, VS_FF_DEBUG, VFT_APP, ...) come from
+// winres.h, which the including WinNumTip.rc pulls in ahead of this file (this .rc2 is
+// only ever #included from there, never compiled on its own).
 
 #ifndef APP_VER_COMMA
 #define APP_VER_COMMA 0,0,0,0          // FILEVERSION/PRODUCTVERSION (comma form)
@@ -47,7 +49,7 @@ BEGIN
             VALUE "OriginalFilename", "WinNumTip.exe"
             VALUE "ProductName",      "WinNumTip"
             VALUE "ProductVersion",   APP_STRINGIZE(APP_PROD_STR)
-            VALUE "LegalCopyright",   "Copyright Â© " APP_STRINGIZE(APP_YEAR) " Ivan Ivon"
+            VALUE "LegalCopyright",   "Copyright © " APP_STRINGIZE(APP_YEAR) " Ivan Ivon"
         END
     END
     BLOCK "VarFileInfo"

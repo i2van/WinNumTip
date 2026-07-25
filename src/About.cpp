@@ -1,6 +1,12 @@
 #include "stdafx.h"
 #include "About.h"
+#include "DialogIcon.h"
 #include "resource.h"
+
+// APP_VER_STR / APP_YEAR are injected by the build (numbers from Directory.Build.props;
+// see WinNumTip.vcxproj). Stringize them to fill the About dialog's "%s" placeholders.
+#define APP_STRINGIZE2(x) #x
+#define APP_STRINGIZE(x)  APP_STRINGIZE2(x)
 
 namespace {
 
@@ -10,16 +16,25 @@ HWND g_dlg = nullptr;
 // Bold font applied to the app-name header; owned here and freed on WM_DESTROY.
 HFONT g_boldFont = nullptr;
 
+// Fill the single "%s" in control 'id''s .rc template text with 'value' (e.g. turn the
+// About dialog's "WinNumTip %s" into "WinNumTip 1.1"). The display text stays in the
+// resource (editable there); only the build-supplied value is substituted here.
+void FormatDlgItemText(HWND dlg, int id, LPCTSTR value) {
+    TCHAR fmt[64];
+    if (GetDlgItemText(dlg, id, fmt, ARRAYSIZE(fmt))) {
+        TCHAR text[128];
+        wsprintf(text, fmt, value);
+        VERIFY(SetDlgItemText(dlg, id, text));
+    }
+}
+
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
     const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
 
     // Give the dialog the app icon: it is owned by the hidden tool window (which has no
     // class icon), so without this Alt+Tab / the taskbar show the generic default icon.
-    const HICON iconBig   = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXICON),   GetSystemMetrics(SM_CYICON),   LR_SHARED));
-    const HICON iconSmall = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
-    if (iconBig)   SendMessage(dlg, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(iconBig));
-    if (iconSmall) SendMessage(dlg, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(iconSmall));
+    DialogIcon::Set(dlg, inst);
 
     // Bold the app-name header: derive a bold copy of the dialog's own (already
     // DPI-scaled) font so the weight change keeps the same face and size.
@@ -34,6 +49,11 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
     SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_LINK)), TRUE);
 
+    // Fill the app-name and copyright "%s" placeholders (see IDD_ABOUT) with the build's
+    // version and year.
+    FormatDlgItemText(dlg, IDC_ABOUT_NAME,      TEXT(APP_STRINGIZE(APP_VER_STR)));
+    FormatDlgItemText(dlg, IDC_ABOUT_COPYRIGHT, TEXT(APP_STRINGIZE(APP_YEAR)));
+
     return FALSE;
 }
 
@@ -42,6 +62,22 @@ void OnDestroy(HWND /*dlg*/) {
 }
 
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
+    // The "Preferences" action link (no href) closes About and opens the Preferences dialog
+    // the way the tray menu does: post IDM_PREFERENCES to our owner (the hidden message
+    // window), which runs the same WM_COMMAND path (see WinNumTip.cpp's OnCommand).
+    // EndDialog merely flags About's modal loop to exit -- the flag is checked before the
+    // loop retrieves its next message -- so About tears down first and the posted command is
+    // picked up afterwards by the main message loop. Preferences therefore opens fresh and
+    // owned by the message window (a sibling, same as from the menu), never nested inside a
+    // still-open About. The owner is captured before EndDialog since 'dlg' is then closing.
+    if (idCtrl == IDC_ABOUT_PREFS && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
+        const HWND owner = GetWindow(dlg, GW_OWNER);
+        VERIFY(EndDialog(dlg, IDCANCEL));
+        VERIFY(PostMessage(owner, WM_COMMAND, MAKEWPARAM(IDM_PREFERENCES, 0), 0));
+
+        return TRUE;
+    }
+
     // A SysLink (the description's "Win+number shortcut", or README/Project site) was
     // clicked (mouse) or activated (Enter): open its URL, embedded in the control's
     // <a href="..."> markup (see IDD_ABOUT).
@@ -57,7 +93,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
 }
 
 void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
-    if (id == IDOK || id == IDCANCEL) EndDialog(dlg, id);
+    if (id == IDOK || id == IDCANCEL) VERIFY(EndDialog(dlg, id));
 }
 
 INT_PTR CALLBACK AboutProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -75,12 +111,15 @@ INT_PTR CALLBACK AboutProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
 namespace About {
 
 void Show(HINSTANCE inst, HWND owner) {
-    // Only one About dialog at a time: if it's already up, just bring it forward.
-    if (g_dlg) { SetForegroundWindow(g_dlg); return; }
+    // Only one About dialog at a time: if it's already up, bring it forward -- but via its
+    // last active popup, so if a Preferences dialog was opened from it (and is thus on top),
+    // re-invoking About (e.g. from the tray) resurfaces that Preferences dialog rather than
+    // hiding it behind About.
+    if (g_dlg) { SetForegroundWindow(GetLastActivePopup(g_dlg)); return; }
     // The SysLink window class is registered once at startup (InitCommonControlsEx in
     // Entry), so the modal dialog can be created directly here. 'inst' is forwarded as
     // the init param so OnInitDialog can load the app icon (WM_SETICON).
-    DialogBoxParam(inst, MAKEINTRESOURCE(IDD_ABOUT), owner, AboutProc, reinterpret_cast<LPARAM>(inst));
+    VERIFY(DialogBoxParam(inst, MAKEINTRESOURCE(IDD_ABOUT), owner, AboutProc, reinterpret_cast<LPARAM>(inst)) != -1);
     g_dlg = nullptr;
 }
 

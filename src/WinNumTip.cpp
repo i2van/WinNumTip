@@ -6,11 +6,14 @@
 // modules together (Taskbar / Overlay / Tray / Keyboard).
 
 #include "stdafx.h"
-#include "resource.h"
-#include "Overlay.h"
-#include "NotifyIcon.h"
-#include "KeyboardHook.h"
+
 #include "About.h"
+#include "KeyboardHook.h"
+#include "NotifyIcon.h"
+#include "Overlay.h"
+#include "Preferences.h"
+#include "PreferencesDialog.h"
+#include "resource.h"
 
 // windowsx-style message cracker for the custom WM_TRAYICON message, so it can be
 // dispatched with HANDLE_MSG just like the standard ones. Kept here as this is the
@@ -20,9 +23,9 @@
 
 namespace {
 
-LPCTSTR const kMsgClass = TEXT("WinNumTipMsg") APP_GUID;
+constexpr LPCTSTR kMsgClass = TEXT("WinNumTipMsg") APP_GUID;
 // Single-instance mutex name; the shared app GUID keeps it globally unique.
-LPCTSTR const kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
+constexpr LPCTSTR kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
 
 // Persistent poll that drives the overlay from the keyboard hook's atomic flag.
 // Runs on the message window for the whole app lifetime (not just while shown), so a
@@ -38,8 +41,9 @@ IUIAutomation* g_uia    = nullptr;
 // WM_TRAYICON is a custom (WM_APP-based) message handled the same way.
 void OnCommand(HWND hwnd, int id, HWND /*ctl*/, UINT /*notify*/) {
     switch (id) {
-        case IDM_ABOUT: About::Show(g_inst, hwnd); break;
-        case IDM_EXIT:  DestroyWindow(hwnd);       break;
+        case IDM_PREFERENCES: PreferencesDialog::Show(g_inst, hwnd); break;
+        case IDM_ABOUT:       About::Show(g_inst, hwnd);             break;
+        case IDM_EXIT:        DestroyWindow(hwnd);                   break;
     }
 }
 
@@ -88,6 +92,9 @@ extern "C" void Entry() {
     // startup), so no SetProcessDpiAwarenessContext call is needed here.
     g_inst = GetModuleHandle(nullptr);
 
+    // Load persisted preferences (INI next to the exe) before the overlay is first shown.
+    Preferences::Load();
+
     // Hidden message-only window that hosts the tray icon and drives the overlay.
     WNDCLASSEX mc;
     ZeroMemory(&mc, sizeof(mc));
@@ -105,11 +112,12 @@ extern "C" void Entry() {
                      __uuidof(IUIAutomation), (void**)&g_uia)));
     Overlay::Init(g_inst);
 
-    // Register the common controls we use (the SysLink in the About dialog) once, so
-    // About::Show can create its modal dialog directly.
+    // Register the common controls we use -- the SysLink (in the About dialog and the
+    // Preferences dialog's "Reset to defaults" link) and the trackbar (slider) in the
+    // Preferences dialog -- once, so those modal dialogs can be created directly.
     INITCOMMONCONTROLSEX icc;
     icc.dwSize = sizeof(icc);
-    icc.dwICC = ICC_LINK_CLASS;
+    icc.dwICC = ICC_LINK_CLASS | ICC_BAR_CLASSES;
     VERIFY(InitCommonControlsEx(&icc));
 
     g_msgWnd = CreateWindowEx(WS_EX_TOOLWINDOW, kMsgClass, TEXT(""), WS_POPUP,
