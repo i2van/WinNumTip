@@ -23,6 +23,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags so the release notes can list every commit since the
+          # previous release tag (git log <prev>..HEAD).
+          fetch-depth: 0
 
       # Read <Version> from Directory.Build.props and derive the release version by
       # dropping a single trailing ".0" -- matching the project's $(DisplayVersion)
@@ -65,18 +69,31 @@ jobs:
           $tag    = "${{ steps.ver.outputs.tag }}"
           $assets = (Get-ChildItem dist\*.zip).FullName
 
-          # Prepend a commit diff (compare) link to the auto-generated notes when a
-          # previous release exists. The first release has nothing to diff against, so
-          # the link is omitted ("if avail"). gh prepends --notes to --generate-notes.
+          # Prepend a bulleted list of the commits new in this release to the auto-generated
+          # notes: everything since the previous release tag, or the whole history for the
+          # first release. gh places --notes above --generate-notes, so the generated
+          # "Full Changelog" link is kept. Each subject gets a trailing "." when it has no
+          # sentence-ending punctuation.
           $prev = gh release view --json tagName --jq '.tagName' 2>$null
           if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($prev)) {
-            $prev    = "$prev".Trim()
-            $compare = "https://github.com/$env:GITHUB_REPOSITORY/compare/$prev...$tag"
-            $notes   = @('--notes', "**Commit diff:** $compare")
-            Write-Host "Including commit diff link: $compare"
+            $range = "$($prev.Trim())..HEAD"
           } else {
-            $notes = @()
-            Write-Host "No previous release; commit diff link omitted."
+            $range = 'HEAD'
+          }
+
+          $notes = @()
+          $subjects = @(git log $range --no-merges --pretty=format:'%s' | Where-Object { $_.Trim() })
+          if ($subjects.Count) {
+            $list = $subjects | ForEach-Object {
+              $s = $_.Trim()
+              if ($s -notmatch '[.!?]$') { $s += '.' }
+              "- $s"
+            }
+            $body  = "## Changes`n`n" + ($list -join "`n")
+            $notes = @('--notes', $body)
+            Write-Host "Including $($subjects.Count) commit(s) in the release notes."
+          } else {
+            Write-Host "No new commits to list."
           }
 
           gh release create $tag $assets --title $tag --generate-notes $notes
