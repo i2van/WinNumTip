@@ -155,7 +155,6 @@ STRINGTABLE
 BEGIN
     IDS_APPTITLE            "WinNumTip"
     IDS_TOOLTIP             "Hold Win+number (0..9) to open the app pinned to the taskbar in that position, or switch to it if already running"
-    IDS_EXIT                "E&xit"
 END
 
 #endif    // Neutral resources

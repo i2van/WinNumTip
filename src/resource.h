@@ -8,7 +8,6 @@
 #define IDD_PREFERENCES                 103
 #define IDS_APPTITLE                    201
 #define IDS_TOOLTIP                     202
-#define IDS_EXIT                        203
 #define IDC_ABOUT_NAME                  1001
 #define IDC_ABOUT_DESC                  1002
 #define IDC_ABOUT_LINK                  1003
