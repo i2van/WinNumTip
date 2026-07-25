@@ -7,6 +7,7 @@ namespace {
 constexpr LPCTSTR kSection      = TEXT("Preferences");
 constexpr LPCTSTR kKeyLabelSize = TEXT("LabelSizePercent");
 constexpr LPCTSTR kKeyInvert    = TEXT("InvertColors");
+constexpr LPCTSTR kKeyBold      = TEXT("BoldFont");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
@@ -17,6 +18,9 @@ int g_labelPercent = 0;
 
 // Cached invert-colors flag; mirrors the INI value.
 bool g_invert = false;
+
+// Cached bold-font flag; mirrors the INI value.
+bool g_bold = false;
 
 int ClampPercent(int v) {
     if (v < Preferences::kMinPercent) return Preferences::kMinPercent;
@@ -40,14 +44,38 @@ void BuildIniPath() {
     lstrcpyn(g_iniPath + slash + 1, kIniName, static_cast<int>(ARRAYSIZE(g_iniPath)) - (slash + 1));
 }
 
+// Persist a boolean preference as "1"/"0" under the given key in the INI file.
+void WriteBool(LPCTSTR key, bool value) {
+    WritePrivateProfileString(kSection, key, value ? TEXT("1") : TEXT("0"), g_iniPath);
+}
+
+// Persist an integer preference under the given key in the INI file.
+void WriteInt(LPCTSTR key, int value) {
+    TCHAR buf[16];
+    wsprintf(buf, TEXT("%d"), value);
+    WritePrivateProfileString(kSection, key, buf, g_iniPath);
+}
+
+// Read an integer preference under the given key from the INI file, or 'def' if absent.
+int ReadInt(LPCTSTR key, int def) {
+    return static_cast<int>(GetPrivateProfileInt(kSection, key, def, g_iniPath));
+}
+
+// Read a boolean preference (stored as a nonzero/zero integer) under the given key from
+// the INI file, or 'def' if absent.
+bool ReadBool(LPCTSTR key, bool def) {
+    return ReadInt(key, def ? 1 : 0) != 0;
+}
+
 } // namespace
 
 namespace Preferences {
 
 void Load() {
     BuildIniPath();
-    g_labelPercent = ClampPercent(GetPrivateProfileInt(kSection, kKeyLabelSize, 0, g_iniPath));
-    g_invert       = GetPrivateProfileInt(kSection, kKeyInvert, 0, g_iniPath) != 0;
+    g_labelPercent = ClampPercent(ReadInt(kKeyLabelSize, 0));
+    g_invert       = ReadBool(kKeyInvert, false);
+    g_bold         = ReadBool(kKeyBold, false);
 }
 
 int LabelSizePercent() {
@@ -56,9 +84,7 @@ int LabelSizePercent() {
 
 void SetLabelSizePercent(int percent) {
     g_labelPercent = ClampPercent(percent);
-    TCHAR buf[16];
-    wsprintf(buf, TEXT("%d"), g_labelPercent);
-    WritePrivateProfileString(kSection, kKeyLabelSize, buf, g_iniPath);
+    WriteInt(kKeyLabelSize, g_labelPercent);
 }
 
 bool InvertColors() {
@@ -67,7 +93,16 @@ bool InvertColors() {
 
 void SetInvertColors(bool invert) {
     g_invert = invert;
-    WritePrivateProfileString(kSection, kKeyInvert, invert ? TEXT("1") : TEXT("0"), g_iniPath);
+    WriteBool(kKeyInvert, invert);
+}
+
+bool BoldFont() {
+    return g_bold;
+}
+
+void SetBoldFont(bool bold) {
+    g_bold = bold;
+    WriteBool(kKeyBold, bold);
 }
 
 } // namespace Preferences

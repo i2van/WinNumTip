@@ -67,6 +67,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     UpdateValueText(dlg);
 
     VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::InvertColors() ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_BOLD, Preferences::BoldFont() ? BST_CHECKED : BST_UNCHECKED));
 
     // Focus the trackbar so the label size can be adjusted with the arrow keys as soon as
     // the dialog opens; returning FALSE tells the dialog manager to keep this focus rather
@@ -85,6 +86,7 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
             Preferences::SetLabelSizePercent(
                 static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0)));
             Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
+            Preferences::SetBoldFont(IsDlgButtonChecked(dlg, IDC_BOLD) == BST_CHECKED);
             VERIFY(EndDialog(dlg, IDOK));
             break;
         case IDCANCEL:
@@ -94,13 +96,15 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
 }
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
-// dialog's controls to their factory defaults -- the slim "Default" strip and colors not
-// inverted. Only the controls are reset here; the change is persisted only if the user
+// dialog's controls to their factory defaults -- the slim "Default" strip, colors not
+// inverted, and a non-bold font. Only the controls are reset here; the change is persisted
+// only if the user
 // then confirms with OK, so Cancel still discards it (matching the OK/Cancel semantics).
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_SETPOS, TRUE, g_minPct);
         VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
+        VERIFY(CheckDlgButton(dlg, IDC_BOLD, BST_UNCHECKED));
         UpdateValueText(dlg);
 
         return TRUE;

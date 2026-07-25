@@ -4,11 +4,12 @@
 // saved with the Get*/WritePrivateProfile* WinAPI). This is the model only; the editing
 // UI lives in PreferencesDialog.
 //
-// Two preferences today:
-//  - the overlay "label size" (see below), and
+// Three preferences today:
+//  - the overlay "label size" (see below),
 //  - "invert colors": whether the strip and number colors are swapped for a highlighted
-//    look.
-// The only preference today is the overlay "label size": how thick the numbered strip is
+//    look, and
+//  - "bold font": whether the numbers are drawn with a bold weight.
+// The label-size preference controls how thick the numbered strip is
 // perpendicular to the taskbar's long axis (the label height for a horizontal taskbar,
 // the label width for a side-docked one). It is an integer percentage in [0, 100] of a
 // full taskbar-button thickness:
@@ -43,5 +44,11 @@ void SetLabelSizePercent(int percent);
 
 // Store the invert-colors flag both in memory and in the INI file next to the executable.
 void SetInvertColors(bool invert);
+
+// Whether the overlay draws the numbers with a bold font weight.
+[[nodiscard]] bool BoldFont();
+
+// Store the bold-font flag both in memory and in the INI file next to the executable.
+void SetBoldFont(bool bold);
 
 } // namespace Preferences

@@ -19,6 +19,7 @@
 #define IDC_SIZE_VALUE                  1012
 #define IDC_INVERT                      1013
 #define IDC_RESET                       1014
+#define IDC_BOLD                        1015
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003

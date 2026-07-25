@@ -397,7 +397,8 @@ void Refresh() {
     // preference has grown the strip past the default, the font is scaled up by the same
     // ratio so the numbers grow to fill the larger cell -- capped to the cell's fixed
     // cross extent (button width for a horizontal bar, button height for a vertical one)
-    // so a digit never overflows the dimension that the strip does not grow.
+    // so a digit never overflows the dimension that the strip does not grow. The "bold
+    // font" preference additionally forces a bold weight.
     NONCLIENTMETRICS ncm;
     ZeroMemory(&ncm, sizeof(ncm));
     ncm.cbSize = sizeof(ncm);
@@ -415,6 +416,7 @@ void Refresh() {
             if (scaled < 1) scaled = 1;
             lf->lfHeight = lf->lfHeight < 0 ? -scaled : scaled;
         }
+        if (Preferences::BoldFont()) ncm.lfMessageFont.lfWeight = FW_BOLD;
         g_font = CreateFontIndirect(&ncm.lfMessageFont);
         g_ownFont = g_font != nullptr;
     }
