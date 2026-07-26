@@ -1,5 +1,9 @@
 # WinNumTip
 
+[![Latest build](https://github.com/i2van/WinNumTip/workflows/build/badge.svg)](https://github.com/i2van/WinNumTip/actions)
+[![Latest release](https://img.shields.io/github/downloads/i2van/WinNumTip/total.svg)](https://github.com/i2van/WinNumTip/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-yellow)](https://opensource.org/licenses/MIT)
+
 **WinNumTip** shows the [`Win`+`number (0..9)` shortcut](https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec#taskbar)
 for each app pinned to the taskbar. While you hold the `Win` key, a small numbered
 strip appears over the taskbar buttons; release the key and it disappears.
