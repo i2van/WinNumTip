@@ -71,6 +71,26 @@ extern "C" {
     #define VERIFY_SHELLEXEC(expr) ((void)(expr))
 #endif
 
+// OpenUrl(owner, url): open 'url' with the shell's default handler (a web browser for
+// http/https links), owned by 'owner'. Wrapped in VERIFY_SHELLEXEC so a failure (a
+// ShellExecute result <= 32) breaks into the debugger in Debug and is a no-op check in
+// Release.
+inline void OpenUrl(HWND owner, LPCTSTR url) {
+    VERIFY_SHELLEXEC(ShellExecute(owner, TEXT("open"), url, nullptr, nullptr, SW_SHOWNORMAL));
+}
+
+// OpenUrlOnContextHelp(dlg, cmd, x, y, url): shared WM_SYSCOMMAND body for the DS_CONTEXTHELP
+// dialogs. The title-bar "?" (context-help) button opens 'url' -- the dialog's README section
+// -- instead of entering Windows' per-control help mode; every other system command (move,
+// close, ...) is forwarded to the default handler unchanged. Each dialog's cracker-dispatched
+// OnSysCommand forwards here with the URL it documents (see HANDLE_WM_SYSCOMMAND callers).
+inline void OpenUrlOnContextHelp(HWND dlg, UINT cmd, int x, int y, LPCTSTR url) {
+    if ((cmd & 0xFFF0) == SC_CONTEXTHELP)
+        OpenUrl(dlg, url);
+    else
+        FORWARD_WM_SYSCOMMAND(dlg, cmd, x, y, DefWindowProc);
+}
+
 // ForegroundDialog(dlg[, top]): bring an already-open modal dialog back to the foreground on
 // a repeat "open" request, so a second instance is never created. Prefers 'top' when given
 // -- e.g. a common dialog (ChooseFont) running over 'dlg', whose owner is disabled while the

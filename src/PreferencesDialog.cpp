@@ -166,6 +166,12 @@ void OnDestroy(HWND /*dlg*/) {
     FontPicker::Cleanup();
 }
 
+// WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
+// style adds, opening the README's Preferences section (see OpenUrlOnContextHelp).
+void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
+    OpenUrlOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md#preferences"));
+}
+
 INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(dlg, WM_INITDIALOG, OnInitDialog);
@@ -173,6 +179,12 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_COMMAND,    OnCommand);
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
+        case WM_SYSCOMMAND:
+            // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
+            // the "?" button never enters help mode; OnSysCommand forwards the commands it does
+            // not consume (move, close, ...) to the default handler itself.
+            (void)HANDLE_WM_SYSCOMMAND(dlg, wParam, lParam, OnSysCommand);
+            return TRUE;
         default: return FALSE;
     }
 }

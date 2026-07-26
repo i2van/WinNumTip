@@ -84,7 +84,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if ((idCtrl == IDC_ABOUT_DESC || idCtrl == IDC_ABOUT_LINK) &&
         (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         const PNMLINK link = reinterpret_cast<PNMLINK>(hdr);
-        VERIFY_SHELLEXEC(ShellExecute(dlg, TEXT("open"), link->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL));
+        OpenUrl(dlg, link->item.szUrl);
 
         return TRUE;
     }
@@ -96,12 +96,24 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
     if (id == IDOK || id == IDCANCEL) VERIFY(EndDialog(dlg, id));
 }
 
+// WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
+// style adds, opening the README (see OpenUrlOnContextHelp).
+void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
+    OpenUrlOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md"));
+}
+
 INT_PTR CALLBACK AboutProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(dlg, WM_INITDIALOG, OnInitDialog);
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
         HANDLE_MSG(dlg, WM_COMMAND,    OnCommand);
+        case WM_SYSCOMMAND:
+            // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
+            // the "?" button never enters help mode; OnSysCommand forwards the commands it does
+            // not consume (move, close, ...) to the default handler itself.
+            (void)HANDLE_WM_SYSCOMMAND(dlg, wParam, lParam, OnSysCommand);
+            return TRUE;
         default: return FALSE;
     }
 }
