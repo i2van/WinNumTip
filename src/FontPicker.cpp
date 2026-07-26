@@ -50,9 +50,10 @@ constexpr LPCTSTR kFontSample   = TEXT("0123456789");
 constexpr UINT_PTR kSampleSubclassId = 1;
 constexpr UINT_PTR kDlgSubclassId    = 2;
 
-// comdlg32 rewrites the ChooseFont Sample control (stc5) with its own preview string
-// ("AaBbYyZz") on every selection change. Subclass it and intercept WM_SETTEXT so the
-// sample always shows our badge digits instead.
+// comdlg32 rewrites the ChooseFont Sample control (stc5) with its own preview string on every
+// selection change. Subclass it and intercept WM_SETTEXT so the sample always shows our badge
+// digits instead. (Its font is driven only by RefreshChooseFontSample; comdlg32 never sets the
+// Sample font itself with this custom template -- verified against the reference FontsSelector.)
 LRESULT CALLBACK FontSampleSubclassProc(HWND w, UINT m, WPARAM wp, LPARAM lp,
                                         UINT_PTR id, DWORD_PTR /*ref*/) {
     switch (m) {
@@ -74,6 +75,7 @@ void RefreshChooseFontSample(HWND hDlg) {
     LOGFONT lf;
     ZeroMemory(&lf, sizeof(lf));
     SendMessage(hDlg, WM_CHOOSEFONT_GETLOGFONT, 0, reinterpret_cast<LPARAM>(&lf));
+    if (lf.lfFaceName[0] == 0) return;   // comdlg32 empties its LOGFONT during teardown -- nothing to render
 
     // The Size control is hidden, so the selection carries the small dialog-font height and the
     // digits would render tiny. Size the sample to fill the Sample box instead -- its face, style
@@ -152,9 +154,17 @@ void RefreshChooseFontSample(HWND hDlg) {
 // style (cmb2) or effects (chx1/chx2). Let it update its internal LOGFONT first (DefSubclassProc),
 // then refresh the Sample and cancel any pending reset. The cracker returns the (ignored)
 // WM_COMMAND result as 0; MAKEWPARAM/hwndCtl reconstruct the message passed on unchanged.
+//
+// Refresh only on an actual selection/effect change -- CBN_SELCHANGE for the combos, BN_CLICKED
+// for the effect checkboxes. comdlg32 also sends the combos focus notifications, and as the
+// dialog is cancelled the focused font combo (cmb1) fires CBN_KILLFOCUS *after* comdlg32 has
+// cleared its LOGFONT; refreshing on that would read an empty face and re-render the Sample in
+// the default font -- a visible flash just before the dialog closes.
 void OnChooseFontCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify) {
     DefSubclassProc(hwnd, WM_COMMAND, MAKEWPARAM(id, codeNotify), reinterpret_cast<LPARAM>(hwndCtl));
-    if (id == cmb1 || id == cmb2 || id == chx1 || id == chx2) {
+    const bool comboChanged  = (id == cmb1 || id == cmb2) && codeNotify == CBN_SELCHANGE;
+    const bool effectToggled = (id == chx1 || id == chx2) && codeNotify == BN_CLICKED;
+    if (comboChanged || effectToggled) {
         RefreshChooseFontSample(hwnd);
         g_resetToFallback = false;   // an explicit font/style/effect change cancels a pending reset
     }
