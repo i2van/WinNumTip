@@ -8,7 +8,8 @@
 //  - the overlay "label size" (see below),
 //  - "invert colors": whether the strip and number colors are swapped for a highlighted
 //    look,
-//  - "bold font": whether the numbers are drawn with a bold weight,
+//  - "font": the face + style (weight/italic/underline/strikeout) the numbers are drawn
+//    with, chosen from the font dialog; unset means the taskbar's own font (the fallback),
 //  - "refresh interval": how often (ms) the shown overlay re-checks the taskbar buttons
 //    and rebuilds the bar in place, and
 //  - "poll interval": how often (ms) the app reconciles the overlay's visibility from the
@@ -63,11 +64,20 @@ void SetLabelSizePercent(int percent);
 // Store the invert-colors flag both in memory and in the INI file next to the executable.
 void SetInvertColors(bool invert);
 
-// Whether the overlay draws the numbers with a bold font weight.
-[[nodiscard]] bool BoldFont();
+// Whether the overlay draws the numbers with a user-selected font (FontIsSet) and, if so,
+// the LOGFONT describing it. Only the face and style fields (lfFaceName, lfWeight,
+// lfItalic, lfUnderline, lfStrikeOut) are meaningful: the overlay drives the glyph height
+// from the taskbar font scaled by the label size, so the stored height is ignored there.
+// When no font is set the overlay uses the taskbar's own font (the fallback).
+[[nodiscard]] bool FontIsSet();
+[[nodiscard]] const LOGFONT& Font();
 
-// Store the bold-font flag both in memory and in the INI file next to the executable.
-void SetBoldFont(bool bold);
+// Store 'lf' as the selected font (an empty lfFaceName clears the selection, same as
+// ClearFont) both in memory and in the INI file next to the executable.
+void SetFont(const LOGFONT& lf);
+
+// Clear the font selection (revert to the taskbar-font fallback) in memory and the INI.
+void ClearFont();
 
 // The overlay refresh-timer interval in milliseconds, in [kMinRefreshMs, kMaxRefreshMs]
 // (see the file header). A changed value takes effect the next time the overlay is shown.

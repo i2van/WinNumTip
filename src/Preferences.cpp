@@ -7,7 +7,11 @@ namespace {
 constexpr LPCTSTR kSection      = TEXT("Preferences");
 constexpr LPCTSTR kKeyLabelSize = TEXT("LabelSizePercent");
 constexpr LPCTSTR kKeyInvert    = TEXT("InvertColors");
-constexpr LPCTSTR kKeyBold      = TEXT("BoldFont");
+constexpr LPCTSTR kKeyFontFace      = TEXT("FontFace");
+constexpr LPCTSTR kKeyFontWeight    = TEXT("FontWeight");
+constexpr LPCTSTR kKeyFontItalic    = TEXT("FontItalic");
+constexpr LPCTSTR kKeyFontUnderline = TEXT("FontUnderline");
+constexpr LPCTSTR kKeyFontStrikeOut = TEXT("FontStrikeOut");
 constexpr LPCTSTR kKeyRefreshMs = TEXT("RefreshIntervalMs");
 constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
@@ -21,8 +25,11 @@ int g_labelPercent = 0;
 // Cached invert-colors flag; mirrors the INI value.
 bool g_invert = false;
 
-// Cached bold-font flag; mirrors the INI value.
-bool g_bold = false;
+// Cached selected font (only lfFaceName + the weight/italic/underline/strikeout style
+// fields are meaningful; height/charset are the overlay's/dialog's concern). Valid only
+// when g_fontSet is true; otherwise the overlay falls back to the taskbar font.
+LOGFONT g_font = { 0 };
+bool g_fontSet = false;
 
 // Cached refresh-timer interval in ms; mirrors the INI value.
 int g_refreshMs = Preferences::kDefaultRefreshMs;
@@ -82,6 +89,18 @@ bool ReadBool(LPCTSTR key, bool def) {
     return ReadInt(key, def ? 1 : 0) != 0;
 }
 
+// Persist a string preference under the given key in the INI file. A null 'value' removes
+// the key from the section.
+void WriteString(LPCTSTR key, LPCTSTR value) {
+    WritePrivateProfileString(kSection, key, value, g_iniPath);
+}
+
+// Read a string preference under the given key into 'buf' (capacity 'cch' chars),
+// substituting 'def' when the key is absent. The buffer is always null-terminated.
+void ReadString(LPCTSTR key, LPCTSTR def, LPTSTR buf, int cch) {
+    GetPrivateProfileString(kSection, key, def, buf, static_cast<DWORD>(cch), g_iniPath);
+}
+
 } // namespace
 
 namespace Preferences {
@@ -90,9 +109,21 @@ void Load() {
     BuildIniPath();
     g_labelPercent = ClampPercent(ReadInt(kKeyLabelSize, 0));
     g_invert       = ReadBool(kKeyInvert, false);
-    g_bold         = ReadBool(kKeyBold, false);
     g_refreshMs    = Clamp(ReadInt(kKeyRefreshMs, kDefaultRefreshMs), kMinRefreshMs, kMaxRefreshMs);
     g_pollMs       = Clamp(ReadInt(kKeyPollMs, kDefaultPollMs), kMinPollMs, kMaxPollMs);
+
+    ZeroMemory(&g_font, sizeof(g_font));
+    TCHAR face[LF_FACESIZE];
+    ReadString(kKeyFontFace, TEXT(""), face, ARRAYSIZE(face));
+    g_fontSet = (face[0] != 0);
+    if (g_fontSet) {
+        lstrcpyn(g_font.lfFaceName, face, LF_FACESIZE);
+        g_font.lfWeight    = ReadInt(kKeyFontWeight, FW_NORMAL);
+        g_font.lfItalic    = static_cast<BYTE>(ReadBool(kKeyFontItalic, false) ? 1 : 0);
+        g_font.lfUnderline = static_cast<BYTE>(ReadBool(kKeyFontUnderline, false) ? 1 : 0);
+        g_font.lfStrikeOut = static_cast<BYTE>(ReadBool(kKeyFontStrikeOut, false) ? 1 : 0);
+        g_font.lfCharSet   = DEFAULT_CHARSET;
+    }
 }
 
 int LabelSizePercent() {
@@ -113,13 +144,41 @@ void SetInvertColors(bool invert) {
     WriteBool(kKeyInvert, invert);
 }
 
-bool BoldFont() {
-    return g_bold;
+bool FontIsSet() {
+    return g_fontSet;
 }
 
-void SetBoldFont(bool bold) {
-    g_bold = bold;
-    WriteBool(kKeyBold, bold);
+const LOGFONT& Font() {
+    return g_font;
+}
+
+void SetFont(const LOGFONT& lf) {
+    if (lf.lfFaceName[0] == 0) { ClearFont(); return; }
+
+    ZeroMemory(&g_font, sizeof(g_font));
+    lstrcpyn(g_font.lfFaceName, lf.lfFaceName, LF_FACESIZE);
+    g_font.lfWeight    = lf.lfWeight;
+    g_font.lfItalic    = lf.lfItalic;
+    g_font.lfUnderline = lf.lfUnderline;
+    g_font.lfStrikeOut = lf.lfStrikeOut;
+    g_font.lfCharSet   = DEFAULT_CHARSET;
+    g_fontSet          = true;
+
+    WriteString(kKeyFontFace, g_font.lfFaceName);
+    WriteInt(kKeyFontWeight, g_font.lfWeight);
+    WriteBool(kKeyFontItalic, g_font.lfItalic != 0);
+    WriteBool(kKeyFontUnderline, g_font.lfUnderline != 0);
+    WriteBool(kKeyFontStrikeOut, g_font.lfStrikeOut != 0);
+}
+
+void ClearFont() {
+    ZeroMemory(&g_font, sizeof(g_font));
+    g_fontSet = false;
+    WriteString(kKeyFontFace, nullptr);
+    WriteString(kKeyFontWeight, nullptr);
+    WriteString(kKeyFontItalic, nullptr);
+    WriteString(kKeyFontUnderline, nullptr);
+    WriteString(kKeyFontStrikeOut, nullptr);
 }
 
 int RefreshIntervalMs() {

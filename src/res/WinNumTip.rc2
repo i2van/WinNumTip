@@ -49,7 +49,7 @@ BEGIN
             VALUE "OriginalFilename", "WinNumTip.exe"
             VALUE "ProductName",      "WinNumTip"
             VALUE "ProductVersion",   APP_STRINGIZE(APP_PROD_STR)
-            VALUE "LegalCopyright",   "Copyright © " APP_STRINGIZE(APP_YEAR) " Ivan Ivon"
+            VALUE "LegalCopyright",   "Copyright ï¿½ " APP_STRINGIZE(APP_YEAR) " Ivan Ivon"
         END
     END
     BLOCK "VarFileInfo"

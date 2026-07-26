@@ -400,8 +400,10 @@ void Refresh() {
     // preference has grown the strip past the default, the font is scaled up by the same
     // ratio so the numbers grow to fill the larger cell -- capped to the cell's fixed
     // cross extent (button width for a horizontal bar, button height for a vertical one)
-    // so a digit never overflows the dimension that the strip does not grow. The "bold
-    // font" preference additionally forces a bold weight.
+    // so a digit never overflows the dimension that the strip does not grow. When a font
+    // has been chosen in Preferences, its face and style (weight/italic/underline/
+    // strikeout) replace the taskbar font's while keeping this computed height; otherwise
+    // the taskbar font is used unchanged (the fallback).
     NONCLIENTMETRICS ncm;
     ZeroMemory(&ncm, sizeof(ncm));
     ncm.cbSize = sizeof(ncm);
@@ -419,7 +421,17 @@ void Refresh() {
             if (scaled < 1) scaled = 1;
             lf->lfHeight = lf->lfHeight < 0 ? -scaled : scaled;
         }
-        if (Preferences::BoldFont()) ncm.lfMessageFont.lfWeight = FW_BOLD;
+        if (Preferences::FontIsSet()) {
+            const LOGFONT& pf = Preferences::Font();
+            LOGFONT* const lf = &ncm.lfMessageFont;
+            lstrcpyn(lf->lfFaceName, pf.lfFaceName, LF_FACESIZE);
+            lf->lfWeight         = pf.lfWeight;
+            lf->lfItalic         = pf.lfItalic;
+            lf->lfUnderline      = pf.lfUnderline;
+            lf->lfStrikeOut      = pf.lfStrikeOut;
+            lf->lfCharSet        = DEFAULT_CHARSET;
+            lf->lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE; // let the face name decide
+        }
         g_font = CreateFontIndirect(&ncm.lfMessageFont);
         g_ownFont = g_font != nullptr;
     }

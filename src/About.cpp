@@ -115,10 +115,7 @@ void Show(HINSTANCE inst, HWND owner) {
     // last active popup, so if a Preferences dialog was opened from it (and is thus on top),
     // re-invoking About (e.g. from the tray) resurfaces that Preferences dialog rather than
     // hiding it behind About.
-    if (g_dlg) { SetForegroundWindow(GetLastActivePopup(g_dlg)); return; }
-    // The SysLink window class is registered once at startup (InitCommonControlsEx in
-    // Entry), so the modal dialog can be created directly here. 'inst' is forwarded as
-    // the init param so OnInitDialog can load the app icon (WM_SETICON).
+    if (g_dlg) { ForegroundDialog(g_dlg); return; }
     VERIFY(DialogBoxParam(inst, MAKEINTRESOURCE(IDD_ABOUT), owner, AboutProc, reinterpret_cast<LPARAM>(inst)) != -1);
     g_dlg = nullptr;
 }

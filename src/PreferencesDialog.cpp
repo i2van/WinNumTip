@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "PreferencesDialog.h"
 #include "DialogIcon.h"
+#include "FontPicker.h"
 #include "Overlay.h"
 #include "Preferences.h"
 #include "resource.h"
@@ -98,7 +99,10 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
 
     VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::InvertColors() ? BST_CHECKED : BST_UNCHECKED));
-    VERIFY(CheckDlgButton(dlg, IDC_BOLD, Preferences::BoldFont() ? BST_CHECKED : BST_UNCHECKED));
+
+    // Seed and show the font preview from the saved selection (or the fallback when none is
+    // set); the font picker owns this state.
+    FontPicker::Init(dlg, inst);
 
     // Focus the trackbar so the label size can be adjusted with the arrow keys as soon as
     // the dialog opens; returning FALSE tells the dialog manager to keep this focus rather
@@ -123,8 +127,11 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
             Preferences::SetPollIntervalMs(
                 static_cast<int>(SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_GETPOS, 0, 0)));
             Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
-            Preferences::SetBoldFont(IsDlgButtonChecked(dlg, IDC_BOLD) == BST_CHECKED);
+            FontPicker::Save();
             VERIFY(EndDialog(dlg, IDOK));
+            break;
+        case IDC_FONT_BUTTON:
+            FontPicker::Choose(dlg);
             break;
         case IDCANCEL:
             VERIFY(EndDialog(dlg, IDCANCEL));
@@ -134,24 +141,29 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
 // dialog's controls to their factory defaults -- the slim "Default" strip, colors not
-// inverted, and a non-bold font. Only the controls are reset here; the change is persisted
-// only if the user
-// then confirms with OK, so Cancel still discards it (matching the OK/Cancel semantics).
+// inverted, and the fallback (taskbar) font. Only the controls are reset here; the change
+// is persisted only if the user then confirms with OK, so Cancel still discards it
+// (matching the OK/Cancel semantics).
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_SETPOS, TRUE, g_minPct);
         SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_SETPOS, TRUE, Preferences::kDefaultRefreshMs);
         SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_SETPOS, TRUE, Preferences::kDefaultPollMs);
         VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
-        VERIFY(CheckDlgButton(dlg, IDC_BOLD, BST_UNCHECKED));
         UpdateValueText(dlg);
         UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
         UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
+        FontPicker::Reset(dlg);
 
         return TRUE;
     }
 
     return FALSE;
+}
+
+// Release the font-picker resources (preview + sample fonts) as the dialog closes.
+void OnDestroy(HWND /*dlg*/) {
+    FontPicker::Cleanup();
 }
 
 INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -160,6 +172,7 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_HSCROLL,    OnHScroll);
         HANDLE_MSG(dlg, WM_COMMAND,    OnCommand);
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
+        HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         default: return FALSE;
     }
 }
@@ -169,9 +182,13 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 namespace PreferencesDialog {
 
 INT_PTR Show(HINSTANCE inst, HWND owner) {
-    // Only one Preferences dialog at a time: if it's already up, bring it (via its last
-    // active popup) forward. Report IDCANCEL since no new choice was made.
-    if (g_dlg) { SetForegroundWindow(GetLastActivePopup(g_dlg)); return IDCANCEL; }
+    // Only one Preferences dialog at a time: if it's already up, bring it forward. When the
+    // ChooseFont dialog is open over it, foreground that (its owner is disabled while modal);
+    // otherwise the dialog's last active popup. Report IDCANCEL since no new choice was made.
+    if (g_dlg) {
+        ForegroundDialog(g_dlg, FontPicker::ActiveDialog());
+        return IDCANCEL;
+    }
     // The trackbar common-control class is registered once at startup (InitCommonControlsEx
     // in Entry). 'inst' is forwarded so OnInitDialog can load the app icon.
     const INT_PTR result = DialogBoxParam(inst, MAKEINTRESOURCE(IDD_PREFERENCES), owner, PreferencesProc, reinterpret_cast<LPARAM>(inst));

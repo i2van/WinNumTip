@@ -16,6 +16,7 @@
 #include <objbase.h>    // COM (CoInitializeEx / CoCreateInstance)
 #include <uiautomation.h>  // IUIAutomation (taskbar button rects)
 #include <commctrl.h>   // SysLink control (NMLINK) + InitCommonControlsEx
+#include <dlgs.h>       // ChooseFont common-dialog template control ids (stc5, cmb1, ...)
 
 // Custom application message posted by the shell to the message window and dispatched
 // there. Defined as a macro (not a namespaced constant) so the windowsx.h HANDLE_MSG
@@ -69,3 +70,12 @@ extern "C" {
 #else
     #define VERIFY_SHELLEXEC(expr) ((void)(expr))
 #endif
+
+// ForegroundDialog(dlg[, top]): bring an already-open modal dialog back to the foreground on
+// a repeat "open" request, so a second instance is never created. Prefers 'top' when given
+// -- e.g. a common dialog (ChooseFont) running over 'dlg', whose owner is disabled while the
+// common dialog is modal -- otherwise 'dlg's last active popup, which resurfaces a child
+// dialog opened from 'dlg' (GetLastActivePopup returns 'dlg' itself when it owns no popups).
+inline void ForegroundDialog(HWND dlg, HWND top = nullptr) {
+    SetForegroundWindow(top ? top : GetLastActivePopup(dlg));
+}

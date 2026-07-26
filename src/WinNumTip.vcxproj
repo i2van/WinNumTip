@@ -88,7 +88,7 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <EntryPointSymbol>Entry</EntryPointSymbol>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib;comdlg32.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <!-- Embeds WinNumTip.manifest (Common-Controls v6 for visual styles +
@@ -146,6 +146,7 @@
     <ClInclude Include="DialogIcon.h" />
     <ClInclude Include="Preferences.h" />
     <ClInclude Include="PreferencesDialog.h" />
+    <ClInclude Include="FontPicker.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -160,6 +161,7 @@
     <ClCompile Include="DialogIcon.cpp" />
     <ClCompile Include="Preferences.cpp" />
     <ClCompile Include="PreferencesDialog.cpp" />
+    <ClCompile Include="FontPicker.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinNumTip.rc" />
