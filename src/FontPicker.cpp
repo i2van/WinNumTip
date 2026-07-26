@@ -44,6 +44,12 @@ constexpr UINT kRefreshSampleMsg = WM_APP + 0x100;
 constexpr LPCTSTR kFontTemplate = TEXT("FONTSELECTORDLG");
 constexpr LPCTSTR kFontSample   = TEXT("0123456789");
 
+// SetWindowSubclass IDs for our two subclasses -- one on the ChooseFont Sample control (stc5),
+// one on the dialog itself; each proc removes its own subclass by the id Windows passes back
+// (see the WM_NCDESTROY cases).
+constexpr UINT_PTR kSampleSubclassId = 1;
+constexpr UINT_PTR kDlgSubclassId    = 2;
+
 // comdlg32 rewrites the ChooseFont Sample control (stc5) with its own preview string
 // ("AaBbYyZz") on every selection change. Subclass it and intercept WM_SETTEXT so the
 // sample always shows our badge digits instead.
@@ -79,6 +85,7 @@ void RefreshChooseFontSample(HWND hDlg) {
     const int boxW = rc.right - rc.left;
     const int boxH = rc.bottom - rc.top;
     constexpr int kRefHeight = 100;
+    constexpr int kFillPercent = 90;   // the digits fill this % of the Sample box (a small margin)
     lf.lfWidth  = 0;
     lf.lfHeight = -kRefHeight;
     if (const HFONT measure = CreateFontIndirect(&lf)) {
@@ -91,8 +98,8 @@ void RefreshChooseFontSample(HWND hDlg) {
         DeleteObject(measure);
 
         int h = kRefHeight;
-        if (ext.cx > 0 && boxW > 0) { const int hw = MulDiv(kRefHeight, boxW * 9 / 10, ext.cx); if (hw < h) h = hw; }
-        if (ext.cy > 0 && boxH > 0) { const int hh = MulDiv(kRefHeight, boxH * 9 / 10, ext.cy); if (hh < h) h = hh; }
+        if (ext.cx > 0 && boxW > 0) { const int hw = MulDiv(kRefHeight, boxW * kFillPercent / 100, ext.cx); if (hw < h) h = hw; }
+        if (ext.cy > 0 && boxH > 0) { const int hh = MulDiv(kRefHeight, boxH * kFillPercent / 100, ext.cy); if (hh < h) h = hh; }
         lf.lfHeight = -(h > 0 ? h : 1);
     }
 
@@ -195,10 +202,10 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 BOOL OnChooseFontInitDialog(HWND hwnd, HWND /*focus*/, LPARAM /*cf*/) {
     g_chooseFontDlg = hwnd;
     if (const HWND sample = GetDlgItem(hwnd, stc5)) {
-        VERIFY(SetWindowSubclass(sample, FontSampleSubclassProc, 1, 0));
+        VERIFY(SetWindowSubclass(sample, FontSampleSubclassProc, kSampleSubclassId, 0));
         VERIFY(SetWindowText(sample, kFontSample));
     }
-    VERIFY(SetWindowSubclass(hwnd, ChooseFontDlgSubclass, 2, 0));
+    VERIFY(SetWindowSubclass(hwnd, ChooseFontDlgSubclass, kDlgSubclassId, 0));
     VERIFY(PostMessage(hwnd, kRefreshSampleMsg, 0, 0));
 
     // Focus the font-name combo (cmb1) instead of the dialog's first tab stop -- which, because
@@ -245,8 +252,7 @@ void UpdateFontPreview(HWND dlg) {
     MoveMemory(&lf, &g_workingFont, sizeof(lf));
 
     // Render at the label's own line height rather than the chosen size.
-    HFONT dlgFont = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0));
-    if (dlgFont) {
+    if (const HFONT dlgFont = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0))) {
         LOGFONT base;
         ZeroMemory(&base, sizeof(base));
         if (GetObject(dlgFont, sizeof(base), &base)) {
@@ -255,8 +261,7 @@ void UpdateFontPreview(HWND dlg) {
         }
     }
 
-    const HFONT nf = CreateFontIndirect(&lf);
-    if (nf) {
+    if (const HFONT nf = CreateFontIndirect(&lf)) {
         SendMessage(name, WM_SETFONT, reinterpret_cast<WPARAM>(nf), TRUE);
         if (g_previewFont) DeleteObject(g_previewFont);
         g_previewFont = nf;
