@@ -236,7 +236,9 @@ void SeedFallbackFont(HWND dlg) {
 // rendered in that face/style at the dialog font's height so any font stays legible.
 void UpdateFontPreview(HWND dlg) {
     const HWND name = GetDlgItem(dlg, IDC_FONT_NAME);
-    VERIFY(SetWindowText(name, g_workingFontSet ? g_workingFont.lfFaceName : TEXT("Default")));
+    TCHAR def[16];
+    VERIFY(LoadString(g_inst, IDS_DEFAULT, def, ARRAYSIZE(def)));
+    VERIFY(SetWindowText(name, g_workingFontSet ? g_workingFont.lfFaceName : def));
 
     LOGFONT lf;
     ZeroMemory(&lf, sizeof(lf));

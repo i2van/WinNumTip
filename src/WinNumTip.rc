@@ -94,7 +94,7 @@ BEGIN
                     "SysLink",WS_TABSTOP,36,20,189,18
     CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>   <a href=""https://github.com/i2van/WinNumTip/"">Project site</a>",IDC_ABOUT_LINK,
                     "SysLink",WS_TABSTOP,36,43,189,10
-    LTEXT           "Copyright ï¿½ %s Ivan Ivon",IDC_ABOUT_COPYRIGHT,36,63,189,10
+    LTEXT           "Copyright © %s Ivan Ivon",IDC_ABOUT_COPYRIGHT,36,63,189,10
     CONTROL         "<a>Preferences</a>",IDC_ABOUT_PREFS,"SysLink",WS_TABSTOP,36,79,60,10
     DEFPUSHBUTTON   "OK",IDOK,175,76,50,14
 END
@@ -105,15 +105,15 @@ CAPTION "WinNumTip Preferences"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     LTEXT           "Label &size:",IDC_SIZE_LABEL,7,8,32,10
-    LTEXT           "Default",IDC_SIZE_VALUE,39,8,40,10
+    LTEXT           "%d%%",IDC_SIZE_VALUE,39,8,40,10
     CONTROL         "",IDC_SIZE_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,22,218,26
     LTEXT           "Default",IDC_STATIC,7,49,80,9
     RTEXT           "Taskbar button",IDC_STATIC,135,49,90,9
     LTEXT           "Shortcuts &refresh:",IDC_REFRESH_LABEL,7,66,110,10
-    RTEXT           "200 ms",IDC_REFRESH_VALUE,155,66,70,10
+    RTEXT           "%d ms",IDC_REFRESH_VALUE,155,66,70,10
     CONTROL         "",IDC_REFRESH_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,79,218,24
     LTEXT           "&Win key poll:",IDC_POLL_LABEL,7,108,110,10
-    RTEXT           "75 ms",IDC_POLL_VALUE,155,108,70,10
+    RTEXT           "%d ms",IDC_POLL_VALUE,155,108,70,10
     CONTROL         "",IDC_POLL_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,121,218,24
     CONTROL         "&Invert colors",IDC_INVERT,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,151,150,10
     LTEXT           "Font:",IDC_FONT_LABEL,7,168,17,10
@@ -205,8 +205,8 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_APPTITLE            "WinNumTip"
     IDS_TOOLTIP             "Hold Win+number (0..9) to open the app pinned to the taskbar in that position, or switch to it if already running"
+    IDS_DEFAULT             "Default"
 END
 
 #endif    // Neutral resources

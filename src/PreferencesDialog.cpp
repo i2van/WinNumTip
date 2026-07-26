@@ -33,20 +33,31 @@ constexpr int kPollPageStep    = 25;
 // slider; the minimum position is shown as "Default" rather than a number.
 int g_minPct = kMinSliderPct;
 
-// Refresh the value readout ("Default" at the minimum, otherwise "NN%") from the trackbar.
+// Value-readout templates captured from the dialog's own statics in OnInitDialog (before the
+// first update overwrites them) so all display text lives in WinNumTip.rc: the size readout's
+// "%d%%" and each interval readout's "%d ms". g_defaultLabel holds IDS_DEFAULT ("Default"),
+// shown for the size readout at the slider minimum.
+TCHAR g_defaultLabel[16];
+TCHAR g_sizeFormat[16];
+TCHAR g_refreshFormat[16];
+TCHAR g_pollFormat[16];
+
+// Refresh the size readout from the trackbar: "Default" at the minimum, otherwise the "%d%%"
+// template applied to the percentage.
 void UpdateValueText(HWND dlg) {
     const int pos = static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0));
     TCHAR buf[16];
-    if (pos <= g_minPct) lstrcpyn(buf, TEXT("Default"), ARRAYSIZE(buf));
-    else                 wsprintf(buf, TEXT("%d%%"), pos);
+    if (pos <= g_minPct) lstrcpyn(buf, g_defaultLabel, ARRAYSIZE(buf));
+    else                 wsprintf(buf, g_sizeFormat, pos);
     VERIFY(SetDlgItemText(dlg, IDC_SIZE_VALUE, buf));
 }
 
-// Refresh a timer-interval slider's value readout ("NNN ms") from its trackbar position.
-void UpdateMsText(HWND dlg, int sliderId, int valueId) {
+// Refresh a timer-interval readout from its trackbar using the control's captured "%d ms"
+// template.
+void UpdateMsText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     const int pos = static_cast<int>(SendDlgItemMessage(dlg, sliderId, TBM_GETPOS, 0, 0));
     TCHAR buf[16];
-    wsprintf(buf, TEXT("%d ms"), pos);
+    wsprintf(buf, fmt, pos);
     VERIFY(SetDlgItemText(dlg, valueId, buf));
 }
 
@@ -57,6 +68,13 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     // Give the dialog the app icon (its owner is the hidden tool window, which has no
     // class icon), shared with the About dialog.
     DialogIcon::Set(dlg, inst);
+
+    // Capture the value-readout templates from the dialog resource before the first update
+    // overwrites them, and load the size readout's "Default" text from the string table.
+    VERIFY(LoadString(inst, IDS_DEFAULT, g_defaultLabel, ARRAYSIZE(g_defaultLabel)));
+    VERIFY(GetDlgItemText(dlg, IDC_SIZE_VALUE,    g_sizeFormat,    ARRAYSIZE(g_sizeFormat)));
+    VERIFY(GetDlgItemText(dlg, IDC_REFRESH_VALUE, g_refreshFormat, ARRAYSIZE(g_refreshFormat)));
+    VERIFY(GetDlgItemText(dlg, IDC_POLL_VALUE,    g_pollFormat,    ARRAYSIZE(g_pollFormat)));
 
     // Resolve the default's share of a full taskbar button from the current taskbar
     // (shared with the renderer); it becomes the slider's minimum so every selectable
@@ -89,14 +107,14 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     SendMessage(rtb, TBM_SETTICFREQ,  kRefreshTickFreq, 0);
     SendMessage(rtb, TBM_SETPAGESIZE, 0, kRefreshPageStep);
     SendMessage(rtb, TBM_SETPOS,      TRUE, Preferences::RefreshIntervalMs());
-    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
+    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
 
     const HWND ptb = GetDlgItem(dlg, IDC_POLL_SLIDER);
     SendMessage(ptb, TBM_SETRANGE,    TRUE, MAKELPARAM(Preferences::kMinPollMs, Preferences::kMaxPollMs));
     SendMessage(ptb, TBM_SETTICFREQ,  kPollTickFreq, 0);
     SendMessage(ptb, TBM_SETPAGESIZE, 0, kPollPageStep);
     SendMessage(ptb, TBM_SETPOS,      TRUE, Preferences::PollIntervalMs());
-    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
+    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
 
     VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::InvertColors() ? BST_CHECKED : BST_UNCHECKED));
 
@@ -113,8 +131,8 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
 void OnHScroll(HWND dlg, HWND /*ctl*/, UINT /*code*/, int /*pos*/) {
     UpdateValueText(dlg);
-    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
-    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
+    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
+    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
 }
 
 void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
@@ -151,8 +169,8 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_SETPOS, TRUE, Preferences::kDefaultPollMs);
         VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
         UpdateValueText(dlg);
-        UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
-        UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
+        UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
+        UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
         FontPicker::Reset(dlg);
 
         return TRUE;
