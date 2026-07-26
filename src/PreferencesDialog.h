@@ -9,6 +9,6 @@ namespace PreferencesDialog {
 // time; a repeat request re-focuses the existing dialog. Returns the dialog result
 // (IDOK when the user confirmed changes, otherwise IDCANCEL) so the caller can re-apply
 // settings that need it (e.g. re-arm the poll timer).
-INT_PTR Show(HINSTANCE inst, HWND owner);
+[[nodiscard]] INT_PTR Show(HINSTANCE inst, HWND owner);
 
 } // namespace PreferencesDialog

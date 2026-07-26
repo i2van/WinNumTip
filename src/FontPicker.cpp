@@ -112,7 +112,7 @@ void RefreshChooseFontSample(HWND hDlg) {
 // it repopulate the style list (cmb2) for the new face and rebuild its LOGFONT; then force the
 // Regular style. The WM_COMMAND handler above refreshes the sample after each notification.
 // Returns false when the fallback face is not in the list (nothing changed).
-bool ResetChooseFontToFallback(HWND hDlg) {
+[[nodiscard]] bool ResetChooseFontToFallback(HWND hDlg) {
     const HWND nameCombo  = GetDlgItem(hDlg, cmb1);
     const HWND styleCombo = GetDlgItem(hDlg, cmb2);
     if (!nameCombo) return false;

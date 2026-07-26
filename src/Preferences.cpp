@@ -37,14 +37,14 @@ int g_refreshMs = Preferences::kDefaultRefreshMs;
 // Cached poll-timer interval in ms; mirrors the INI value.
 int g_pollMs = Preferences::kDefaultPollMs;
 
-int ClampPercent(int v) {
+[[nodiscard]] int ClampPercent(int v) {
     if (v < Preferences::kMinPercent) return Preferences::kMinPercent;
     if (v > Preferences::kMaxPercent) return Preferences::kMaxPercent;
     return v;
 }
 
 // Clamp 'v' to the inclusive [lo, hi] range.
-int Clamp(int v, int lo, int hi) {
+[[nodiscard]] int Clamp(int v, int lo, int hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
     return v;
@@ -79,13 +79,13 @@ void WriteInt(LPCTSTR key, int value) {
 }
 
 // Read an integer preference under the given key from the INI file, or 'def' if absent.
-int ReadInt(LPCTSTR key, int def) {
+[[nodiscard]] int ReadInt(LPCTSTR key, int def) {
     return static_cast<int>(GetPrivateProfileInt(kSection, key, def, g_iniPath));
 }
 
 // Read a boolean preference (stored as a nonzero/zero integer) under the given key from
 // the INI file, or 'def' if absent.
-bool ReadBool(LPCTSTR key, bool def) {
+[[nodiscard]] bool ReadBool(LPCTSTR key, bool def) {
     return ReadInt(key, def ? 1 : 0) != 0;
 }
 
