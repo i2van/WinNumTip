@@ -35,8 +35,9 @@ IUIAutomation* g_uia   = nullptr;
 HINSTANCE      g_inst  = nullptr;
 int            g_snapN = 0;                     // button count captured when the bar was built
 RECT           g_snap[kMaxBadges];              // button rects captured when the bar was built
+// Timer id for the persistent refresh timer; its interval is the user's "refresh interval"
+// preference (Preferences::RefreshIntervalMs), re-applied on each Show.
 constexpr UINT_PTR kRefreshTimer = 1;
-constexpr UINT     kRefreshMs    = 200;
 
 // Forward decls. Refresh() rebuilds the bar's contents in place for the current
 // taskbar; while a session is active the overlay window and its timer persist, so
@@ -267,8 +268,10 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     if (!g_overlay) {
         g_overlay = CreateOverlayWindow(inst);
         if (!g_overlay) return;
-        VERIFY(SetTimer(g_overlay, kRefreshTimer, kRefreshMs, nullptr));
     }
+    // Re-arm each session (the window and its timer persist across sessions) so a changed
+    // refresh-interval preference takes effect on the next Win-press.
+    VERIFY(SetTimer(g_overlay, kRefreshTimer, Preferences::RefreshIntervalMs(), nullptr));
     g_active = true;
     Refresh();
 }

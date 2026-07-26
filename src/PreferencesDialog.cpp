@@ -20,6 +20,13 @@ constexpr int kMinSliderPct = 1;
 constexpr int kSliderTickFreq = 10;
 constexpr int kSliderPageStep = 10;
 
+// Timer-interval trackbar tuning (the ms ranges live in Preferences): a tick mark and a
+// PageUp/PageDown step every N milliseconds.
+constexpr int kRefreshTickFreq = 50;
+constexpr int kRefreshPageStep = 50;
+constexpr int kPollTickFreq    = 25;
+constexpr int kPollPageStep    = 25;
+
 // The trackbar's minimum percentage: the default strip's share of a full taskbar button.
 // Percentages below this render identically to the default, so they are excluded from the
 // slider; the minimum position is shown as "Default" rather than a number.
@@ -32,6 +39,14 @@ void UpdateValueText(HWND dlg) {
     if (pos <= g_minPct) lstrcpyn(buf, TEXT("Default"), ARRAYSIZE(buf));
     else                 wsprintf(buf, TEXT("%d%%"), pos);
     VERIFY(SetDlgItemText(dlg, IDC_SIZE_VALUE, buf));
+}
+
+// Refresh a timer-interval slider's value readout ("NNN ms") from its trackbar position.
+void UpdateMsText(HWND dlg, int sliderId, int valueId) {
+    const int pos = static_cast<int>(SendDlgItemMessage(dlg, sliderId, TBM_GETPOS, 0, 0));
+    TCHAR buf[16];
+    wsprintf(buf, TEXT("%d ms"), pos);
+    VERIFY(SetDlgItemText(dlg, valueId, buf));
 }
 
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
@@ -66,6 +81,22 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     SendMessage(tb, TBM_SETPOS,      TRUE, cur);
     UpdateValueText(dlg);
 
+    // Timer-interval sliders: fixed ms ranges from Preferences, seeded from the saved
+    // values, each with its own "NNN ms" readout.
+    const HWND rtb = GetDlgItem(dlg, IDC_REFRESH_SLIDER);
+    SendMessage(rtb, TBM_SETRANGE,    TRUE, MAKELPARAM(Preferences::kMinRefreshMs, Preferences::kMaxRefreshMs));
+    SendMessage(rtb, TBM_SETTICFREQ,  kRefreshTickFreq, 0);
+    SendMessage(rtb, TBM_SETPAGESIZE, 0, kRefreshPageStep);
+    SendMessage(rtb, TBM_SETPOS,      TRUE, Preferences::RefreshIntervalMs());
+    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
+
+    const HWND ptb = GetDlgItem(dlg, IDC_POLL_SLIDER);
+    SendMessage(ptb, TBM_SETRANGE,    TRUE, MAKELPARAM(Preferences::kMinPollMs, Preferences::kMaxPollMs));
+    SendMessage(ptb, TBM_SETTICFREQ,  kPollTickFreq, 0);
+    SendMessage(ptb, TBM_SETPAGESIZE, 0, kPollPageStep);
+    SendMessage(ptb, TBM_SETPOS,      TRUE, Preferences::PollIntervalMs());
+    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
+
     VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::InvertColors() ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_BOLD, Preferences::BoldFont() ? BST_CHECKED : BST_UNCHECKED));
 
@@ -78,6 +109,8 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
 void OnHScroll(HWND dlg, HWND /*ctl*/, UINT /*code*/, int /*pos*/) {
     UpdateValueText(dlg);
+    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
+    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
 }
 
 void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
@@ -85,6 +118,10 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
         case IDOK:
             Preferences::SetLabelSizePercent(
                 static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0)));
+            Preferences::SetRefreshIntervalMs(
+                static_cast<int>(SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_GETPOS, 0, 0)));
+            Preferences::SetPollIntervalMs(
+                static_cast<int>(SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_GETPOS, 0, 0)));
             Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
             Preferences::SetBoldFont(IsDlgButtonChecked(dlg, IDC_BOLD) == BST_CHECKED);
             VERIFY(EndDialog(dlg, IDOK));
@@ -103,9 +140,13 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_SETPOS, TRUE, g_minPct);
+        SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_SETPOS, TRUE, Preferences::kDefaultRefreshMs);
+        SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_SETPOS, TRUE, Preferences::kDefaultPollMs);
         VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_BOLD, BST_UNCHECKED));
         UpdateValueText(dlg);
+        UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE);
+        UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE);
 
         return TRUE;
     }
@@ -127,14 +168,16 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 
 namespace PreferencesDialog {
 
-void Show(HINSTANCE inst, HWND owner) {
+INT_PTR Show(HINSTANCE inst, HWND owner) {
     // Only one Preferences dialog at a time: if it's already up, bring it (via its last
-    // active popup) forward.
-    if (g_dlg) { SetForegroundWindow(GetLastActivePopup(g_dlg)); return; }
+    // active popup) forward. Report IDCANCEL since no new choice was made.
+    if (g_dlg) { SetForegroundWindow(GetLastActivePopup(g_dlg)); return IDCANCEL; }
     // The trackbar common-control class is registered once at startup (InitCommonControlsEx
     // in Entry). 'inst' is forwarded so OnInitDialog can load the app icon.
-    VERIFY(DialogBoxParam(inst, MAKEINTRESOURCE(IDD_PREFERENCES), owner, PreferencesProc, reinterpret_cast<LPARAM>(inst)) != -1);
+    const INT_PTR result = DialogBoxParam(inst, MAKEINTRESOURCE(IDD_PREFERENCES), owner, PreferencesProc, reinterpret_cast<LPARAM>(inst));
+    VERIFY(result != -1);
     g_dlg = nullptr;
+    return result;
 }
 
 } // namespace PreferencesDialog

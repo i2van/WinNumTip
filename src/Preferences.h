@@ -4,11 +4,15 @@
 // saved with the Get*/WritePrivateProfile* WinAPI). This is the model only; the editing
 // UI lives in PreferencesDialog.
 //
-// Three preferences today:
+// Five preferences today:
 //  - the overlay "label size" (see below),
 //  - "invert colors": whether the strip and number colors are swapped for a highlighted
-//    look, and
-//  - "bold font": whether the numbers are drawn with a bold weight.
+//    look,
+//  - "bold font": whether the numbers are drawn with a bold weight,
+//  - "refresh interval": how often (ms) the shown overlay re-checks the taskbar buttons
+//    and rebuilds the bar in place, and
+//  - "poll interval": how often (ms) the app reconciles the overlay's visibility from the
+//    keyboard hook.
 // The label-size preference controls how thick the numbered strip is
 // perpendicular to the taskbar's long axis (the label height for a horizontal taskbar,
 // the label width for a side-docked one). It is an integer percentage in [0, 100] of a
@@ -26,6 +30,20 @@ namespace Preferences {
 // [kMinPercent, kMaxPercent] of a full taskbar-button thickness.
 constexpr int kMinPercent = 0;
 constexpr int kMaxPercent = 100;
+
+// The overlay refresh-timer interval, in milliseconds: how often the shown overlay
+// re-checks the taskbar buttons and rebuilds the bar in place. Lower is more responsive to
+// taskbar changes but polls more often.
+constexpr int kMinRefreshMs     = 50;
+constexpr int kMaxRefreshMs     = 1000;
+constexpr int kDefaultRefreshMs = 200;
+
+// The keyboard poll-timer interval, in milliseconds: how often the app reconciles the
+// overlay's visibility from the keyboard hook's flag + live key state. Lower shows/hides
+// the overlay with less latency but polls more often.
+constexpr int kMinPollMs     = 25;
+constexpr int kMaxPollMs     = 500;
+constexpr int kDefaultPollMs = 75;
 
 // Load preferences from the INI file next to the executable (Get*PrivateProfile*). Call
 // once at startup, before the overlay is first shown.
@@ -50,5 +68,21 @@ void SetInvertColors(bool invert);
 
 // Store the bold-font flag both in memory and in the INI file next to the executable.
 void SetBoldFont(bool bold);
+
+// The overlay refresh-timer interval in milliseconds, in [kMinRefreshMs, kMaxRefreshMs]
+// (see the file header). A changed value takes effect the next time the overlay is shown.
+[[nodiscard]] int RefreshIntervalMs();
+
+// Store the refresh-timer interval (clamped to [kMinRefreshMs, kMaxRefreshMs]) both in
+// memory and in the INI file next to the executable.
+void SetRefreshIntervalMs(int ms);
+
+// The keyboard poll-timer interval in milliseconds, in [kMinPollMs, kMaxPollMs] (see the
+// file header). A changed value takes effect once the Preferences dialog is accepted.
+[[nodiscard]] int PollIntervalMs();
+
+// Store the poll-timer interval (clamped to [kMinPollMs, kMaxPollMs]) both in memory and
+// in the INI file next to the executable.
+void SetPollIntervalMs(int ms);
 
 } // namespace Preferences

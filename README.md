@@ -24,9 +24,30 @@ position - **WinNumTip** just reminds you which number is which.
 - Adjustable badge size via the tray icon's **Preferences** dialog - from the
   default slim strip up to the full taskbar-button size (label height for a
   horizontal taskbar, label width for a vertical one); the numbers scale to match.
-- **Invert colors** option (same dialog) that swaps the strip and number colors for
-  a highlighted look.
-- Preferences are saved next to the app in `WinNumTip.ini`.
+
+## Preferences
+
+Right-click the tray icon and choose **Preferences...** (or click **Preferences** in the
+**About** dialog) to open the settings dialog. Settings are saved next to the app in the
+`[Preferences]` section of `WinNumTip.ini` when you click **OK**, and discarded on
+**Cancel**; they take effect the next time you hold the `Win` key.
+
+- **Label size** - how thick the numbered strip is across the taskbar: its height on a
+  horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
+  built-in strip) up to a full **Taskbar button** cell, and the numbers scale to match.
+  INI key: `LabelSizePercent` (a percentage).
+- **Shortcuts refresh** - how often, in milliseconds, the numbered badges re-sync with the
+  taskbar buttons while shown, so the numbers stay aligned when a button appears,
+  disappears, or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
+  but polls more often. INI key: `RefreshIntervalMs`.
+- **Win key poll** - how often, in milliseconds, the app checks the `Win` key state to show
+  or hide the strip. Range `25`-`500` ms, default `75` ms; lower reacts faster to pressing
+  or releasing `Win` but polls more often. INI key: `PollIntervalMs`.
+- **Invert colors** - swaps the strip and number colors for a highlighted look. Off by
+  default. INI key: `InvertColors`.
+- **Bold font** - draws the numbers with a bold weight. Off by default. INI key: `BoldFont`.
+- **Reset to defaults** - restores every option above to its factory default in the dialog;
+  the change is saved only if you then confirm with **OK**.
 
 ## Requirements
 

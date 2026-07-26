@@ -27,21 +27,32 @@ constexpr LPCTSTR kMsgClass = TEXT("WinNumTipMsg") APP_GUID;
 // Single-instance mutex name; the shared app GUID keeps it globally unique.
 constexpr LPCTSTR kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
 
-// Persistent poll that drives the overlay from the keyboard hook's atomic flag.
-// Runs on the message window for the whole app lifetime (not just while shown), so a
-// Win-down is always picked up and the state self-heals every tick.
+// Persistent poll that drives the overlay from the keyboard hook's atomic flag. Runs on
+// the message window for the whole app lifetime (not just while shown), so a Win-down is
+// always picked up and the state self-heals every tick. Its interval is the user's "poll
+// interval" preference (Preferences::PollIntervalMs), re-armed when Preferences is accepted.
 constexpr UINT_PTR kPollTimer = 1;
-constexpr UINT     kPollMs     = 75;
 
 HINSTANCE      g_inst   = nullptr;
 HWND           g_msgWnd = nullptr;
 IUIAutomation* g_uia    = nullptr;
 
+// Arm (or re-arm) the persistent poll timer on the message window with the current "poll
+// interval" preference. Re-arming replaces the running timer's period, so this is used both
+// at startup and after the preference may have changed (Preferences accepted).
+void ArmPollTimer() {
+    VERIFY(SetTimer(g_msgWnd, kPollTimer, Preferences::PollIntervalMs(), nullptr));
+}
+
 // Standard messages are dispatched through the windowsx.h HANDLE_MSG crackers;
 // WM_TRAYICON is a custom (WM_APP-based) message handled the same way.
 void OnCommand(HWND hwnd, int id, HWND /*ctl*/, UINT /*notify*/) {
     switch (id) {
-        case IDM_PREFERENCES: PreferencesDialog::Show(g_inst, hwnd); break;
+        case IDM_PREFERENCES:
+            // Re-arm the poll timer with the (possibly changed) interval when the dialog is
+            // accepted; the persistent timer would otherwise keep running at the old rate.
+            if (PreferencesDialog::Show(g_inst, hwnd) == IDOK) ArmPollTimer();
+            break;
         case IDM_ABOUT:       About::Show(g_inst, hwnd);             break;
         case IDM_EXIT:        DestroyWindow(hwnd);                   break;
     }
@@ -92,6 +103,14 @@ extern "C" void Entry() {
     // startup), so no SetProcessDpiAwarenessContext call is needed here.
     g_inst = GetModuleHandle(nullptr);
 
+    // Harden timer callbacks before any SetTimer (the poll timer below and the overlay's
+    // refresh timer): by default 64-bit Windows silently swallows exceptions raised inside
+    // a timer (or window) callback, which can mask bugs and hide security issues. Opt out of
+    // that legacy suppression process-wide so such exceptions surface normally. The flag is
+    // unsupported on pre-2004 Windows 10, where the call simply fails (hence no VERIFY).
+    BOOL suppressTimerProcExceptions = FALSE;
+    SetUserObjectInformationW(GetCurrentProcess(), UOI_TIMERPROC_EXCEPTION_SUPPRESSION, &suppressTimerProcExceptions, sizeof(suppressTimerProcExceptions));
+
     // Load persisted preferences (INI next to the exe) before the overlay is first shown.
     Preferences::Load();
 
@@ -126,7 +145,7 @@ extern "C" void Entry() {
     NotifyIcon::Add(g_inst, g_msgWnd);
     VERIFY(KeyboardHook::Install(g_inst));
     // Drive the overlay by polling the hook's atomic flag + live key state.
-    VERIFY(SetTimer(g_msgWnd, kPollTimer, kPollMs, nullptr));
+    ArmPollTimer();
 
     MSG m;
     while (GetMessage(&m, nullptr, 0, 0) > 0) {

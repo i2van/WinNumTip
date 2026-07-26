@@ -19,6 +19,12 @@
 #define IDC_INVERT                      1013
 #define IDC_RESET                       1014
 #define IDC_BOLD                        1015
+#define IDC_REFRESH_LABEL               1016
+#define IDC_REFRESH_VALUE               1017
+#define IDC_REFRESH_SLIDER              1018
+#define IDC_POLL_LABEL                  1019
+#define IDC_POLL_VALUE                  1020
+#define IDC_POLL_SLIDER                 1021
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -29,7 +35,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        102
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1000
+#define _APS_NEXT_CONTROL_VALUE         1022
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

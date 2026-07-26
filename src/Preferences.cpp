@@ -8,6 +8,8 @@ constexpr LPCTSTR kSection      = TEXT("Preferences");
 constexpr LPCTSTR kKeyLabelSize = TEXT("LabelSizePercent");
 constexpr LPCTSTR kKeyInvert    = TEXT("InvertColors");
 constexpr LPCTSTR kKeyBold      = TEXT("BoldFont");
+constexpr LPCTSTR kKeyRefreshMs = TEXT("RefreshIntervalMs");
+constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
@@ -22,9 +24,22 @@ bool g_invert = false;
 // Cached bold-font flag; mirrors the INI value.
 bool g_bold = false;
 
+// Cached refresh-timer interval in ms; mirrors the INI value.
+int g_refreshMs = Preferences::kDefaultRefreshMs;
+
+// Cached poll-timer interval in ms; mirrors the INI value.
+int g_pollMs = Preferences::kDefaultPollMs;
+
 int ClampPercent(int v) {
     if (v < Preferences::kMinPercent) return Preferences::kMinPercent;
     if (v > Preferences::kMaxPercent) return Preferences::kMaxPercent;
+    return v;
+}
+
+// Clamp 'v' to the inclusive [lo, hi] range.
+int Clamp(int v, int lo, int hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
     return v;
 }
 
@@ -76,6 +91,8 @@ void Load() {
     g_labelPercent = ClampPercent(ReadInt(kKeyLabelSize, 0));
     g_invert       = ReadBool(kKeyInvert, false);
     g_bold         = ReadBool(kKeyBold, false);
+    g_refreshMs    = Clamp(ReadInt(kKeyRefreshMs, kDefaultRefreshMs), kMinRefreshMs, kMaxRefreshMs);
+    g_pollMs       = Clamp(ReadInt(kKeyPollMs, kDefaultPollMs), kMinPollMs, kMaxPollMs);
 }
 
 int LabelSizePercent() {
@@ -103,6 +120,24 @@ bool BoldFont() {
 void SetBoldFont(bool bold) {
     g_bold = bold;
     WriteBool(kKeyBold, bold);
+}
+
+int RefreshIntervalMs() {
+    return g_refreshMs;
+}
+
+void SetRefreshIntervalMs(int ms) {
+    g_refreshMs = Clamp(ms, kMinRefreshMs, kMaxRefreshMs);
+    WriteInt(kKeyRefreshMs, g_refreshMs);
+}
+
+int PollIntervalMs() {
+    return g_pollMs;
+}
+
+void SetPollIntervalMs(int ms) {
+    g_pollMs = Clamp(ms, kMinPollMs, kMaxPollMs);
+    WriteInt(kKeyPollMs, g_pollMs);
 }
 
 } // namespace Preferences
