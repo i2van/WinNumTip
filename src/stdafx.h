@@ -99,3 +99,15 @@ inline void OpenUrlOnContextHelp(HWND dlg, UINT cmd, int x, int y, LPCTSTR url) 
 inline void ForegroundDialog(HWND dlg, HWND top = nullptr) {
     SetForegroundWindow(top ? top : GetLastActivePopup(dlg));
 }
+
+// LoadStr(inst, id, buffer): load the string resource 'id' from 'inst' into the fixed-size
+// stack 'buffer', with its capacity deduced as the template size parameter N. buffer[0] is
+// cleared first so a missing or empty resource leaves a valid, null-terminated empty string
+// rather than uninitialized stack memory -- callers can use the result unconditionally.
+// Returns 'buffer' so it can be passed straight to an API (e.g. MessageBox, SetWindowText).
+template <int N>
+inline LPCTSTR LoadStr(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
+    buffer[0] = 0;
+    LoadString(inst, id, buffer, N);
+    return buffer;
+}

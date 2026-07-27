@@ -210,6 +210,8 @@ STRINGTABLE
 BEGIN
     IDS_TOOLTIP             "Hold Win+number (0..9) to open the app pinned to the taskbar in that position, or switch to it if already running"
     IDS_DEFAULT             "Default"
+    IDS_FONT_PICKER_ERROR   "Unable to open font selector."
+    IDS_APP_NAME            "WinNumTip"
 END
 
 #endif    // Neutral resources

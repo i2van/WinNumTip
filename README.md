@@ -60,7 +60,7 @@ Right-click the tray icon and choose **Preferences...** (or click **Preferences*
 
   > `WinNumTip.ini` keys: `InvertColors`
 
-- **Font** - click **Choose...** to pick the typeface and style (weight, italic, underline,
+- **Font** - click **Select...** to pick the typeface and style (weight, italic, underline,
   strikeout) the numbers are drawn with; the selected name is previewed in that font next to
   the button. Only the face and style are used - the badge size stays governed by **Label
   size** - and the color follows **Invert colors**. When no font is chosen the taskbar's own

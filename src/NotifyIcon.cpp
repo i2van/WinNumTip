@@ -13,12 +13,6 @@ HWND           g_msgWnd = nullptr;
 UINT           g_taskbarCreated = 0;   // "TaskbarCreated" broadcast (Explorer restart)
 HICON          g_ownedIcon = nullptr;  // icon we must DestroyIcon (from LoadImage); null if shared
 
-// Load a resource string into a caller buffer.
-void LoadStr(HINSTANCE inst, UINT id, LPTSTR buf, int cch) {
-    buf[0] = 0;
-    LoadString(inst, id, buf, cch);
-}
-
 } // namespace
 
 namespace NotifyIcon {
@@ -44,7 +38,9 @@ void Add(HINSTANCE inst, HWND msgWnd) {
                                                GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
     if (g_nid.hIcon) g_ownedIcon = g_nid.hIcon;
     else             g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-    LoadStr(inst, IDS_TOOLTIP, g_nid.szTip, ARRAYSIZE(g_nid.szTip));
+
+    LoadStr(inst, IDS_TOOLTIP, g_nid.szTip);
+
     VERIFY(Shell_NotifyIcon(NIM_ADD, &g_nid));
 }
 
@@ -61,16 +57,24 @@ bool HandleTaskbarCreated(UINT msg) {
     return true;
 }
 
-void ShowMenu(HINSTANCE inst, HWND hwnd) {
+void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
+    if (!menuOwner || !IsWindow(menuOwner)) menuOwner = commandTarget;
+
+    SetForegroundWindow(menuOwner); // required so the menu dismisses correctly
+
+    if(!show) return;
+
     const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_TRAYMENU));
     if (!menu) return;
     const HMENU sub = GetSubMenu(menu, 0);
     POINT pt;
     VERIFY(GetCursorPos(&pt));
-    SetForegroundWindow(hwnd); // required so the menu dismisses correctly
-    TrackPopupMenu(sub, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
-    PostMessage(hwnd, WM_NULL, 0, 0);
+
+    const UINT command = TrackPopupMenu(sub, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+                                        pt.x, pt.y, 0, menuOwner, nullptr);
+    PostMessage(commandTarget, WM_NULL, 0, 0);
     VERIFY(DestroyMenu(menu));
+    if (command) VERIFY(PostMessage(commandTarget, WM_COMMAND, MAKEWPARAM(command, 0), 0));
 }
 
 } // namespace NotifyIcon

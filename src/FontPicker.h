@@ -13,13 +13,8 @@ namespace FontPicker {
 void Init(HWND dlg, HINSTANCE inst);
 
 // Open the ChooseFont common dialog; on OK adopt the selection as the working font and
-// refresh the preview. Call when the "Choose..." button is clicked.
-void Choose(HWND dlg);
-
-// The ChooseFont common dialog window while it is open (it runs modally over the Preferences
-// dialog), or null when it is not open. Lets the parent bring the font dialog itself to the
-// foreground on a repeat Preferences request, rather than its disabled owner.
-[[nodiscard]] HWND ActiveDialog();
+// refresh the preview.
+void Open(HWND dlg);
 
 // Reset the working font to the taskbar-font fallback and refresh the preview. The change
 // is not persisted until Save (matching the dialog's OK/Cancel semantics).

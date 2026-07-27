@@ -2,6 +2,7 @@
 #include "PreferencesDialog.h"
 #include "DialogIcon.h"
 #include "FontPicker.h"
+#include "FontPickerHelper.h"
 #include "Overlay.h"
 #include "Preferences.h"
 #include "resource.h"
@@ -71,7 +72,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
     // Capture the value-readout templates from the dialog resource before the first update
     // overwrites them, and load the size readout's "Default" text from the string table.
-    VERIFY(LoadString(inst, IDS_DEFAULT, g_defaultLabel, ARRAYSIZE(g_defaultLabel)));
+    LoadStr(inst, IDS_DEFAULT, g_defaultLabel);
     VERIFY(GetDlgItemText(dlg, IDC_SIZE_VALUE,    g_sizeFormat,    ARRAYSIZE(g_sizeFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_REFRESH_VALUE, g_refreshFormat, ARRAYSIZE(g_refreshFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_POLL_VALUE,    g_pollFormat,    ARRAYSIZE(g_pollFormat)));
@@ -149,7 +150,7 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
             VERIFY(EndDialog(dlg, IDOK));
             break;
         case IDC_FONT_BUTTON:
-            FontPicker::Choose(dlg);
+            FontPicker::Open(dlg);
             break;
         case IDCANCEL:
             VERIFY(EndDialog(dlg, IDCANCEL));
@@ -184,6 +185,12 @@ void OnDestroy(HWND /*dlg*/) {
     FontPicker::Cleanup();
 }
 
+// If shell/menu activation lands on the disabled Preferences dialog while the helper font
+// dialog is open, redirect activation back to the helper on its own UI thread.
+void OnActivate(HWND /*dlg*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
+    if (state != WA_INACTIVE) (void)FontPickerHelper::ActivateDialog();
+}
+
 // WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
 // style adds, opening the README's Preferences section (see OpenUrlOnContextHelp).
 void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
@@ -196,6 +203,7 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_HSCROLL,    OnHScroll);
         HANDLE_MSG(dlg, WM_COMMAND,    OnCommand);
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
+        HANDLE_MSG(dlg, WM_ACTIVATE,   OnActivate);
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         case WM_SYSCOMMAND:
             // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
@@ -212,11 +220,11 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 namespace PreferencesDialog {
 
 INT_PTR Show(HINSTANCE inst, HWND owner) {
-    // Only one Preferences dialog at a time: if it's already up, bring it forward. When the
-    // ChooseFont dialog is open over it, foreground that (its owner is disabled while modal);
-    // otherwise the dialog's last active popup. Report IDCANCEL since no new choice was made.
+    // Only one Preferences dialog at a time: if it's already up, bring the helper process's
+    // ChooseFont dialog forward when present, otherwise foreground Preferences itself. Report
+    // IDCANCEL since no new choice was made.
     if (g_dlg) {
-        ForegroundDialog(g_dlg, FontPicker::ActiveDialog());
+        if (!FontPickerHelper::ActivateDialog()) ForegroundDialog(g_dlg);
         return IDCANCEL;
     }
     // The trackbar common-control class is registered once at startup (InitCommonControlsEx

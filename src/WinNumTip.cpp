@@ -8,6 +8,7 @@
 #include "stdafx.h"
 
 #include "About.h"
+#include "FontPickerHelper.h"
 #include "KeyboardHook.h"
 #include "NotifyIcon.h"
 #include "Overlay.h"
@@ -80,8 +81,12 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_TIMER, OnTimer);
         HANDLE_MSG(hwnd, WM_TRAYICON, [](HWND h, UINT mouse) {
-            if (mouse == WM_RBUTTONUP || mouse == WM_LBUTTONUP || mouse == WM_CONTEXTMENU)
-                NotifyIcon::ShowMenu(g_inst, h);
+            bool isLeftButton = mouse == WM_LBUTTONUP;
+            if (mouse == WM_RBUTTONUP || isLeftButton || mouse == WM_CONTEXTMENU) {
+                const HWND fontDialog = FontPickerHelper::ActiveDialog();
+                if (fontDialog) (void)FontPickerHelper::ActivateDialog();
+                NotifyIcon::ShowMenu(g_inst, !isLeftButton, h, fontDialog);
+            }
         });
         HANDLE_MSG(hwnd, WM_COMMAND, OnCommand);
         HANDLE_MSG(hwnd, WM_DESTROY, OnDestroy);
@@ -95,14 +100,21 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 // Entry point (no CRT). Linked via /ENTRY:Entry.
 // ---------------------------------------------------------------------------
 extern "C" void Entry() {
+    g_inst = GetModuleHandle(nullptr);
+    if (FontPickerHelper::RunIfRequested(g_inst)) {
+        // The system font dialog can leave font-cache worker threads inside system DLLs.
+        // A normal ExitProcess may deadlock while running their detach callbacks, so the
+        // disposable helper terminates after publishing its shared-memory result.
+        TerminateProcess(GetCurrentProcess(), 0);
+        ExitProcess(0);
+    }
+
     // Enforce a single running instance via a named mutex (UUID-based name).
     CreateMutex(nullptr, TRUE, kMutexName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(0);
 
     // Per-Monitor-V2 DPI awareness is declared in WinNumTip.manifest (applied at
     // startup), so no SetProcessDpiAwarenessContext call is needed here.
-    g_inst = GetModuleHandle(nullptr);
-
     // Harden timer callbacks before any SetTimer (the poll timer below and the overlay's
     // refresh timer): by default 64-bit Windows silently swallows exceptions raised inside
     // a timer (or window) callback, which can mask bugs and hide security issues. Opt out of
