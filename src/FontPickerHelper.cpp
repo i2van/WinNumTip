@@ -6,9 +6,7 @@
 // DefSubclassProc's result, which the standard HANDLE_WM_SETTEXT cracker discards.
 #define WM_FONT_SAMPLE_SETTEXT WM_SETTEXT
 #define HANDLE_WM_FONT_SAMPLE_SETTEXT(hwnd, wParam, lParam, fn) ((fn)((hwnd), reinterpret_cast<LPCTSTR>(lParam)))
-#define WM_FONT_PICKER_REFRESH_SAMPLE (WM_APP + 0x100)
-#define HANDLE_WM_FONT_PICKER_REFRESH_SAMPLE(hwnd, wParam, lParam, fn) ((fn)(hwnd), 0L)
-#define WM_FONT_PICKER_ACTIVATE (WM_APP + 0x101)
+#define WM_FONT_PICKER_ACTIVATE (WM_APP + 0x100)
 #define HANDLE_WM_FONT_PICKER_ACTIVATE(hwnd, wParam, lParam, fn) ((fn)(hwnd), 0L)
 
 namespace {
@@ -94,19 +92,22 @@ LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     switch (msg) {
         HANDLE_MSG(hwnd, WM_FONT_SAMPLE_SETTEXT, OnFontSampleSetText);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnFontSampleNcDestroy);
-        default: return DefSubclassProc(hwnd, msg, wParam, lParam);
+        case WM_SETFONT:
+            // comdlg32 applies the small dialog font after the hook's WM_INITDIALOG.
+            // Keep our fitted sample font until ApplyChooseFontSample replaces it.
+            if (g_sampleFont &&
+                reinterpret_cast<HFONT>(wParam) != g_sampleFont)
+                return 0;
+            break;
     }
+
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-// Repaint the ChooseFont Sample control in the currently selected font. With a custom
-// template comdlg32 does not refresh it, so size the selected face/style to fit the box.
-void RefreshChooseFontSample(HWND dialog) {
-    const HWND sample = GetDlgItem(dialog, stc5);
-    if (!sample) return;
-
+// Apply a selected face/style to the ChooseFont Sample control, sized to fit its box.
+void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
     LOGFONT lf;
-    ZeroMemory(&lf, sizeof(lf));
-    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0, reinterpret_cast<LPARAM>(&lf));
+    MoveMemory(&lf, &selected, sizeof(lf));
     if (lf.lfFaceName[0] == 0) return;
 
     RECT rc;
@@ -146,6 +147,18 @@ void RefreshChooseFontSample(HWND dialog) {
     g_sampleFont = font;
     SendMessage(sample, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
     VERIFY(SetWindowText(sample, kFontSample));
+}
+
+// Repaint the ChooseFont Sample control in the currently selected font. With a custom
+// template comdlg32 does not refresh it, so read and apply its live selection.
+void RefreshChooseFontSample(HWND dialog) {
+    const HWND sample = GetDlgItem(dialog, stc5);
+    if (!sample) return;
+
+    LOGFONT lf;
+    ZeroMemory(&lf, sizeof(lf));
+    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0, reinterpret_cast<LPARAM>(&lf));
+    ApplyChooseFontSample(sample, lf);
 }
 
 // Drive the visible controls so comdlg32 rebuilds its internal LOGFONT for the fallback.
@@ -254,8 +267,9 @@ void OnChooseFontNcDestroy(HWND dialog) {
     FORWARD_WM_NCDESTROY(dialog, DefSubclassProc);
 }
 
-void OnRefreshChooseFontSample(HWND dialog) {
-    RefreshChooseFontSample(dialog);
+void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
+    if (show) RefreshChooseFontSample(dialog);
+    FORWARD_WM_SHOWWINDOW(dialog, show, status, DefSubclassProc);
 }
 
 void OnActivateChooseFont(HWND dialog) {
@@ -272,13 +286,13 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         HANDLE_MSG(hwnd, WM_NOTIFY, OnChooseFontNotify);
         HANDLE_MSG(hwnd, WM_CLOSE, OnChooseFontClose);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnChooseFontNcDestroy);
-        HANDLE_MSG(hwnd, WM_FONT_PICKER_REFRESH_SAMPLE, OnRefreshChooseFontSample);
+        HANDLE_MSG(hwnd, WM_SHOWWINDOW, OnChooseFontShowWindow);
         HANDLE_MSG(hwnd, WM_FONT_PICKER_ACTIVATE, OnActivateChooseFont);
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 }
 
-BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM /*chooseFont*/) {
+BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam) {
     SetDialog(dialog);
 
     // The dialog is owned by a hidden helper window, so center it over Preferences.
@@ -310,9 +324,12 @@ BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM /*chooseFont*/) 
     if (const HWND sample = GetDlgItem(dialog, stc5)) {
         VERIFY(SetWindowSubclass(sample, FontSampleSubclassProc, kSampleSubclassId, 0));
         VERIFY(SetWindowText(sample, kFontSample));
+        const CHOOSEFONT* const chooseFont =
+            reinterpret_cast<const CHOOSEFONT*>(chooseFontParam);
+        if (chooseFont && chooseFont->lpLogFont)
+            ApplyChooseFontSample(sample, *chooseFont->lpLogFont);
     }
     VERIFY(SetWindowSubclass(dialog, ChooseFontDlgSubclass, kDlgSubclassId, 0));
-    VERIFY(PostMessage(dialog, WM_FONT_PICKER_REFRESH_SAMPLE, 0, 0));
 
     if (const HWND nameCombo = GetDlgItem(dialog, cmb1))
         SetFocus(nameCombo);
