@@ -81,6 +81,11 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_TIMER, OnTimer);
         HANDLE_MSG(hwnd, WM_TRAYICON, [](HWND h, UINT mouse) {
+            if (mouse == WM_LBUTTONDBLCLK) {
+                VERIFY(PostMessage(h, WM_COMMAND, MAKEWPARAM(IDM_PREFERENCES, 0), 0));
+                return;
+            }
+
             bool isLeftButton = mouse == WM_LBUTTONUP;
             if (mouse == WM_RBUTTONUP || isLeftButton || mouse == WM_CONTEXTMENU) {
                 const HWND fontDialog = FontPickerHelper::ActiveDialog();

@@ -31,10 +31,10 @@ position - **WinNumTip** just reminds you which number is which.
 
 ## Preferences
 
-Right-click the tray icon and choose **Preferences...** (or click **Preferences** in the
-**About** dialog) to open the settings dialog. Settings are saved next to the app in the
-`[Preferences]` section of `WinNumTip.ini` keyswhen you click **OK**, and discarded on
-**Cancel**; they take effect the next time you hold the `Win` key.
+Double-click the tray icon, right-click it and choose **Preferences...**, or click
+**Preferences** in the **About** dialog to open the settings dialog.
+
+Settings are saved next to the app in the `WinNumTip.ini` and take effect the next time you hold the `Win` key.
 
 - **Label size** - how thick the numbered strip is across the taskbar: its height on a
   horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
