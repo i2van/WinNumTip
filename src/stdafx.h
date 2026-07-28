@@ -4,9 +4,9 @@
 
 // Target Windows 10+ (required for Per-Monitor-V2 DPI, GetSystemMetricsForDpi,
 // SystemParametersInfoForDpi, SHQueryUserNotificationState, etc.).
-#define WINVER        0x0A00
-#define _WIN32_WINNT  0x0A00
-#define NTDDI_VERSION 0x0A000006   // NTDDI_WIN10_RS5
+#define WINVER        _WIN32_WINNT_WIN10
+#define _WIN32_WINNT  WINVER
+#define NTDDI_VERSION NTDDI_WIN10_FE
 
 #include <windows.h>
 #include <windowsx.h>   // HANDLE_MSG message crackers
