@@ -34,7 +34,9 @@ position - **WinNumTip** just reminds you which number is which.
 Double-click the tray icon, right-click it and choose **Preferences...**, or click
 **Preferences** in the **About** dialog to open the settings dialog.
 
-Settings are saved next to the app in the `WinNumTip.ini` and take effect the next time you hold the `Win` key.
+Settings are saved next to the app in `WinNumTip.ini`. Click **Apply** to save them
+without closing the dialog, or **OK** to save and close; applied settings take effect
+immediately.
 
 - **Label size** - how thick the numbered strip is across the taskbar: its height on a
   horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
@@ -69,7 +71,7 @@ Settings are saved next to the app in the `WinNumTip.ini` and take effect the ne
   > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 
 - **Reset to defaults** - restores every option above to its factory default in the dialog;
-  the change is saved only if you then confirm with **OK**.
+  the change is saved only if you then click **Apply** or **OK**.
 
 ## Requirements
 

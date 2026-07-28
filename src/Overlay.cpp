@@ -36,7 +36,7 @@ HINSTANCE      g_inst  = nullptr;
 int            g_snapN = 0;                     // button count captured when the bar was built
 RECT           g_snap[kMaxBadges];              // button rects captured when the bar was built
 // Timer id for the persistent refresh timer; its interval is the user's "refresh interval"
-// preference (Preferences::RefreshIntervalMs), re-applied on each Show.
+// preference (Preferences::RefreshIntervalMs), re-applied on each Show or Apply.
 constexpr UINT_PTR kRefreshTimer = 1;
 
 // Forward decls. Refresh() rebuilds the bar's contents in place for the current
@@ -48,6 +48,10 @@ void Refresh();
 // Count the current on-screen taskbar buttons (0 when the taskbar is missing or
 // obscured), filling 'out'. Shared by the timer's change check and Refresh.
 [[nodiscard]] int CollectCurrent(RECT* out, int max);
+
+inline void ArmRefreshTimer() {
+    VERIFY(SetTimer(g_overlay, kRefreshTimer, Preferences::RefreshIntervalMs(), nullptr));
+}
 
 // Destroy all child controls (number labels + separators) of the overlay window.
 void DestroyChildren(HWND wnd) {
@@ -271,8 +275,14 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     }
     // Re-arm each session (the window and its timer persist across sessions) so a changed
     // refresh-interval preference takes effect on the next Win-press.
-    VERIFY(SetTimer(g_overlay, kRefreshTimer, Preferences::RefreshIntervalMs(), nullptr));
+    ArmRefreshTimer();
     g_active = true;
+    Refresh();
+}
+
+void ApplyPreferences() {
+    if (!g_active || !g_overlay) return;
+    ArmRefreshTimer();
     Refresh();
 }
 

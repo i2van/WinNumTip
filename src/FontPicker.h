@@ -17,12 +17,15 @@ void Init(HWND dlg, HINSTANCE inst);
 void Open(HWND dlg);
 
 // Reset the working font to the taskbar-font fallback and refresh the preview. The change
-// is not persisted until Save (matching the dialog's OK/Cancel semantics).
+// is not persisted until Save (matching the dialog's OK/Apply/Cancel semantics).
 void Reset(HWND dlg);
 
 // Persist the working font to Preferences (SetFont, or ClearFont when using the fallback).
-// Call on OK.
+// Call on OK or Apply.
 void Save();
+
+// Whether the working font differs from the currently persisted font preference.
+[[nodiscard]] bool HasChanges();
 
 // Release the preview font this module owns. Call from WM_DESTROY.
 void Cleanup();

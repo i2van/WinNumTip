@@ -30,6 +30,7 @@
 #define IDC_FONT_BUTTON                 1018
 #define IDC_RESET                       1019
 #define IDC_FONT_RESET_LINK             1020
+#define IDC_APPLY                       1021
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -40,7 +41,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        102
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1021
+#define _APS_NEXT_CONTROL_VALUE         1022
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

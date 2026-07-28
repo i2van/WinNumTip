@@ -31,7 +31,7 @@ constexpr LPCTSTR kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
 // Persistent poll that drives the overlay from the keyboard hook's atomic flag. Runs on
 // the message window for the whole app lifetime (not just while shown), so a Win-down is
 // always picked up and the state self-heals every tick. Its interval is the user's "poll
-// interval" preference (Preferences::PollIntervalMs), re-armed when Preferences is accepted.
+// interval" preference (Preferences::PollIntervalMs), re-armed when Preferences is applied.
 constexpr UINT_PTR kPollTimer = 1;
 
 HINSTANCE      g_inst   = nullptr;
@@ -40,9 +40,14 @@ IUIAutomation* g_uia    = nullptr;
 
 // Arm (or re-arm) the persistent poll timer on the message window with the current "poll
 // interval" preference. Re-arming replaces the running timer's period, so this is used both
-// at startup and after the preference may have changed (Preferences accepted).
+// at startup and after the preference may have changed (Preferences applied).
 void ArmPollTimer() {
     VERIFY(SetTimer(g_msgWnd, kPollTimer, Preferences::PollIntervalMs(), nullptr));
+}
+
+void ApplyPreferenceChanges() {
+    ArmPollTimer();
+    Overlay::ApplyPreferences();
 }
 
 // Standard messages are dispatched through the windowsx.h HANDLE_MSG crackers;
@@ -51,11 +56,12 @@ void OnCommand(HWND hwnd, int id, HWND /*ctl*/, UINT /*notify*/) {
     switch (id) {
         case IDM_PREFERENCES:
             // Re-arm the poll timer with the (possibly changed) interval when the dialog is
-            // accepted; the persistent timer would otherwise keep running at the old rate.
-            if (PreferencesDialog::Show(g_inst, hwnd) == IDOK) ArmPollTimer();
+            // closed through OK; the persistent timer would otherwise keep the old rate.
+            if (PreferencesDialog::Show(g_inst, hwnd) == IDOK) ApplyPreferenceChanges();
             break;
-        case IDM_ABOUT:       About::Show(g_inst, hwnd);             break;
-        case IDM_EXIT:        DestroyWindow(hwnd);                   break;
+        case IDC_APPLY: ApplyPreferenceChanges();  break;
+        case IDM_ABOUT: About::Show(g_inst, hwnd); break;
+        case IDM_EXIT:  DestroyWindow(hwnd);       break;
     }
 }
 

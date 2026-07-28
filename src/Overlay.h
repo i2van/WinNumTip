@@ -15,6 +15,10 @@ void Shutdown();
 // Create and draw the overlay for the current taskbar state (no-op if already shown).
 void Show(IUIAutomation* uia, HINSTANCE inst);
 
+// Re-apply preference-backed rendering and the refresh interval to an active overlay.
+// No-op while the overlay is hidden.
+void ApplyPreferences();
+
 // Destroy the overlay window (no-op if not shown).
 void Hide();
 

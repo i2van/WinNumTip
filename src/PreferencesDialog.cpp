@@ -62,6 +62,37 @@ void UpdateMsText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     VERIFY(SetDlgItemText(dlg, valueId, buf));
 }
 
+void SetApplyEnabled(HWND dlg, bool enabled) {
+    const HWND apply = GetDlgItem(dlg, IDC_APPLY);
+    if (!enabled && GetFocus() == apply) SetFocus(GetDlgItem(dlg, IDOK));
+    EnableWindow(apply, enabled ? TRUE : FALSE);
+}
+
+void UpdateApplyState(HWND dlg) {
+    int savedSize = Preferences::LabelSizePercent();
+    if (savedSize < g_minPct) savedSize = g_minPct;
+    else if (savedSize > Preferences::kMaxPercent) savedSize = Preferences::kMaxPercent;
+
+    const bool changed =
+        static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0)) != savedSize ||
+        static_cast<int>(SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_GETPOS, 0, 0)) != Preferences::RefreshIntervalMs() ||
+        static_cast<int>(SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_GETPOS, 0, 0)) != Preferences::PollIntervalMs() ||
+        (IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED) != Preferences::InvertColors() ||
+        FontPicker::HasChanges();
+    SetApplyEnabled(dlg, changed);
+}
+
+void SaveValues(HWND dlg) {
+    Preferences::SetLabelSizePercent(
+        static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0)));
+    Preferences::SetRefreshIntervalMs(
+        static_cast<int>(SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_GETPOS, 0, 0)));
+    Preferences::SetPollIntervalMs(
+        static_cast<int>(SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_GETPOS, 0, 0)));
+    Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
+    FontPicker::Save();
+}
+
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
     const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
@@ -122,6 +153,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     // Seed and show the font preview from the saved selection (or the fallback when none is
     // set); the font picker owns this state.
     FontPicker::Init(dlg, inst);
+    UpdateApplyState(dlg);
 
     // Focus the trackbar so the label size can be adjusted with the arrow keys as soon as
     // the dialog opens; returning FALSE tells the dialog manager to keep this focus rather
@@ -134,23 +166,28 @@ void OnHScroll(HWND dlg, HWND /*ctl*/, UINT /*code*/, int /*pos*/) {
     UpdateValueText(dlg);
     UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
     UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
+    UpdateApplyState(dlg);
 }
 
-void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
+void OnCommand(HWND dlg, int id, HWND ctl, UINT notify) {
     switch (id) {
         case IDOK:
-            Preferences::SetLabelSizePercent(
-                static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0)));
-            Preferences::SetRefreshIntervalMs(
-                static_cast<int>(SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_GETPOS, 0, 0)));
-            Preferences::SetPollIntervalMs(
-                static_cast<int>(SendDlgItemMessage(dlg, IDC_POLL_SLIDER, TBM_GETPOS, 0, 0)));
-            Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
-            FontPicker::Save();
+            SaveValues(dlg);
             VERIFY(EndDialog(dlg, IDOK));
             break;
+        case IDC_APPLY: {
+            SaveValues(dlg);
+            UpdateApplyState(dlg);
+            const HWND owner = GetWindow(dlg, GW_OWNER);
+            if (owner) FORWARD_WM_COMMAND(owner, id, ctl, notify, SendMessage);
+            break;
+        }
         case IDC_FONT_BUTTON:
             FontPicker::Open(dlg);
+            UpdateApplyState(dlg);
+            break;
+        case IDC_INVERT:
+            if (notify == BN_CLICKED) UpdateApplyState(dlg);
             break;
         case IDCANCEL:
             VERIFY(EndDialog(dlg, IDCANCEL));
@@ -161,8 +198,8 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
 // dialog's controls to their factory defaults -- the slim "Default" strip, colors not
 // inverted, and the fallback (taskbar) font. Only the controls are reset here; the change
-// is persisted only if the user then confirms with OK, so Cancel still discards it
-// (matching the OK/Cancel semantics).
+// is persisted only if the user then confirms with OK or Apply, so Cancel still discards
+// unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_SETPOS, TRUE, g_minPct);
@@ -173,6 +210,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
         UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
         FontPicker::Reset(dlg);
+        UpdateApplyState(dlg);
 
         return TRUE;
     }

@@ -114,6 +114,18 @@ void Save() {
     else                  Preferences::ClearFont();
 }
 
+bool HasChanges() {
+    if (g_workingFontSet != Preferences::FontIsSet()) return true;
+    if (!g_workingFontSet) return false;
+
+    const LOGFONT& saved = Preferences::Font();
+    return lstrcmp(g_workingFont.lfFaceName, saved.lfFaceName) != 0 ||
+           g_workingFont.lfWeight    != saved.lfWeight ||
+           g_workingFont.lfItalic    != saved.lfItalic ||
+           g_workingFont.lfUnderline != saved.lfUnderline ||
+           g_workingFont.lfStrikeOut != saved.lfStrikeOut;
+}
+
 void Cleanup() {
     if (g_previewFont) { DeleteObject(g_previewFont); g_previewFont = nullptr; }
 }

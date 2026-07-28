@@ -80,7 +80,7 @@ void SetFont(const LOGFONT& lf);
 void ClearFont();
 
 // The overlay refresh-timer interval in milliseconds, in [kMinRefreshMs, kMaxRefreshMs]
-// (see the file header). A changed value takes effect the next time the overlay is shown.
+// (see the file header). A changed value takes effect when Preferences is applied.
 [[nodiscard]] int RefreshIntervalMs();
 
 // Store the refresh-timer interval (clamped to [kMinRefreshMs, kMaxRefreshMs]) both in
@@ -88,7 +88,7 @@ void ClearFont();
 void SetRefreshIntervalMs(int ms);
 
 // The keyboard poll-timer interval in milliseconds, in [kMinPollMs, kMaxPollMs] (see the
-// file header). A changed value takes effect once the Preferences dialog is accepted.
+// file header). A changed value takes effect when the Preferences dialog is applied.
 [[nodiscard]] int PollIntervalMs();
 
 // Store the poll-timer interval (clamped to [kMinPollMs, kMaxPollMs]) both in memory and
