@@ -105,8 +105,8 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | DS_CONTEXTHELP | WS_POPUP | WS_CA
 CAPTION "WinNumTip Preferences"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    LTEXT           "Label &size:",IDC_SIZE_LABEL,7,7,32,10
-    LTEXT           "%d%%",IDC_SIZE_VALUE,39,7,40,10
+    LTEXT           "Label &size:",IDC_SIZE_LABEL,7,8,110,10
+    RTEXT           "%d%%",IDC_SIZE_VALUE,193,8,70,10
     CONTROL         "",IDC_SIZE_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,21,256,26
     LTEXT           "Default",IDC_STATIC,7,48,80,9
     RTEXT           "Taskbar button",IDC_STATIC,173,48,90,9
@@ -117,9 +117,9 @@ BEGIN
     RTEXT           "%d ms",IDC_POLL_VALUE,193,107,70,10
     CONTROL         "",IDC_POLL_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,120,256,24
     CONTROL         "In&vert colors",IDC_INVERT,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,150,253,10
-    LTEXT           "Font:",IDC_FONT_LABEL,7,167,17,10
+    LTEXT           "&Font:",IDC_FONT_LABEL,7,167,17,10
+    PUSHBUTTON      "Select...",IDC_FONT_BUTTON,213,164,50,14
     LTEXT           "Default",IDC_FONT_NAME,27,165,182,14,SS_NOPREFIX | SS_CENTERIMAGE | SS_ENDELLIPSIS | WS_BORDER
-    PUSHBUTTON      "S&elect...",IDC_FONT_BUTTON,213,164,50,14
     CONTROL         "<a>Reset to defaults</a>",IDC_RESET,"SysLink",WS_GROUP | WS_TABSTOP,7,191,91,10
     DEFPUSHBUTTON   "OK",IDOK,105,187,50,14,WS_GROUP
     PUSHBUTTON      "Cancel",IDCANCEL,159,187,50,14
