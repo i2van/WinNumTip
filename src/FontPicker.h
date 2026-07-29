@@ -16,6 +16,10 @@ void Init(HWND dlg, HINSTANCE inst);
 // refresh the preview.
 void Open(HWND dlg);
 
+// Adopt a selection applied by the still-open ChooseFont dialog, refresh the preview, and
+// persist just the font preference. A null selection means the taskbar-font fallback.
+void ApplySelection(HWND dlg, const LOGFONT* selected);
+
 // Reset the working font to the taskbar-font fallback and refresh the preview. The change
 // is not persisted until Save (matching the dialog's OK/Apply/Cancel semantics).
 void Reset(HWND dlg);

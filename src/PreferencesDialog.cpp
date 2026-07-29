@@ -7,6 +7,12 @@
 #include "Preferences.h"
 #include "resource.h"
 
+#define WM_FONT_PICKER_APPLY_SELECTION FontPickerHelper::kApplySelectionMessage
+#define HANDLE_WM_FONT_PICKER_APPLY_SELECTION(hwnd, wParam, lParam, fn) \
+    ((fn)((hwnd), static_cast<FontPickerHelper::Result>(static_cast<LONG>(wParam))) \
+         ? TRUE \
+         : FALSE)
+
 namespace {
 
 // The live modal Preferences dialog, or null when none is open (enforces a single
@@ -93,6 +99,14 @@ void SaveValues(HWND dlg) {
     FontPicker::Save();
 }
 
+void NotifyApplied(HWND dlg) {
+    const HWND owner = GetWindow(dlg, GW_OWNER);
+    if (owner) {
+        FORWARD_WM_COMMAND(owner, IDC_APPLY, GetDlgItem(dlg, IDC_APPLY),
+                           BN_CLICKED, SendMessage);
+    }
+}
+
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
     const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
@@ -169,7 +183,7 @@ void OnHScroll(HWND dlg, HWND /*ctl*/, UINT /*code*/, int /*pos*/) {
     UpdateApplyState(dlg);
 }
 
-void OnCommand(HWND dlg, int id, HWND ctl, UINT notify) {
+void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
     switch (id) {
         case IDOK:
             SaveValues(dlg);
@@ -178,8 +192,7 @@ void OnCommand(HWND dlg, int id, HWND ctl, UINT notify) {
         case IDC_APPLY: {
             SaveValues(dlg);
             UpdateApplyState(dlg);
-            const HWND owner = GetWindow(dlg, GW_OWNER);
-            if (owner) FORWARD_WM_COMMAND(owner, id, ctl, notify, SendMessage);
+            NotifyApplied(dlg);
             break;
         }
         case IDC_FONT_BUTTON:
@@ -193,6 +206,28 @@ void OnCommand(HWND dlg, int id, HWND ctl, UINT notify) {
             VERIFY(EndDialog(dlg, IDCANCEL));
             break;
     }
+}
+
+[[nodiscard]] bool OnFontPickerApply(HWND dlg, FontPickerHelper::Result result) {
+    const bool chosen = result == FontPickerHelper::Result::Chosen;
+    const bool useDefault = result == FontPickerHelper::Result::Default;
+    if (!chosen && !useDefault) {
+        VERIFY(chosen || useDefault);
+        return false;
+    }
+
+    LOGFONT selected;
+    ZeroMemory(&selected, sizeof(selected));
+    if (chosen) {
+        const bool read = FontPickerHelper::ReadAppliedFont(selected);
+        VERIFY(read);
+        if (!read) return false;
+    }
+
+    FontPicker::ApplySelection(dlg, chosen ? &selected : nullptr);
+    UpdateApplyState(dlg);
+    NotifyApplied(dlg);
+    return true;
 }
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
@@ -243,6 +278,7 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
         HANDLE_MSG(dlg, WM_ACTIVATE,   OnActivate);
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
+        HANDLE_MSG(dlg, WM_FONT_PICKER_APPLY_SELECTION, OnFontPickerApply);
         case WM_SYSCOMMAND:
             // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
             // the "?" button never enters help mode; OnSysCommand forwards the commands it does

@@ -66,7 +66,8 @@ immediately.
   strikeout) the numbers are drawn with; the selected name is previewed in that font next to
   the button. Only the face and style are used - the badge size stays governed by **Label
   size** - and the color follows **Invert colors**. When no font is chosen the taskbar's own
-  font is used (**Default**).
+  font is used (**Default**). When the selection changes, click **Apply** in the font selector
+  to save the current font without closing the selector.
 
   > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 

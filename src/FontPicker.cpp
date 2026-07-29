@@ -65,6 +65,16 @@ void UpdateFontPreview(HWND dlg) {
     }
 }
 
+void SetWorkingSelection(HWND dlg, const LOGFONT* selected) {
+    if (selected) {
+        MoveMemory(&g_workingFont, selected, sizeof(g_workingFont));
+        g_workingFontSet = true;
+    } else {
+        SeedFallbackFont(dlg);
+    }
+    UpdateFontPreview(dlg);
+}
+
 } // namespace
 
 namespace FontPicker {
@@ -92,21 +102,22 @@ void Init(HWND dlg, HINSTANCE inst) {
 void Open(HWND dlg) {
     LOGFONT selected;
     ZeroMemory(&selected, sizeof(selected));
-    const FontPickerHelper::Result result = FontPickerHelper::Open(g_inst, dlg, g_workingFont, g_fallbackFont, selected);
+    const FontPickerHelper::Result result = FontPickerHelper::Open(
+        g_inst, dlg, g_workingFont, !g_workingFontSet, g_fallbackFont, selected);
 
-    if (result == FontPickerHelper::Result::Chosen) {
-        MoveMemory(&g_workingFont, &selected, sizeof(g_workingFont));
-        g_workingFontSet = true;
-        UpdateFontPreview(dlg);
-    } else if (result == FontPickerHelper::Result::Default) {
-        SeedFallbackFont(dlg);
-        UpdateFontPreview(dlg);
-    }
+    if (result == FontPickerHelper::Result::Chosen)
+        SetWorkingSelection(dlg, &selected);
+    else if (result == FontPickerHelper::Result::Default)
+        SetWorkingSelection(dlg, nullptr);
+}
+
+void ApplySelection(HWND dlg, const LOGFONT* selected) {
+    SetWorkingSelection(dlg, selected);
+    Save();
 }
 
 void Reset(HWND dlg) {
-    SeedFallbackFont(dlg);
-    UpdateFontPreview(dlg);
+    SetWorkingSelection(dlg, nullptr);
 }
 
 void Save() {

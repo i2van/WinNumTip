@@ -6,13 +6,17 @@
 // DefSubclassProc's result, which the standard HANDLE_WM_SETTEXT cracker discards.
 #define WM_FONT_SAMPLE_SETTEXT WM_SETTEXT
 #define HANDLE_WM_FONT_SAMPLE_SETTEXT(hwnd, wParam, lParam, fn) ((fn)((hwnd), reinterpret_cast<LPCTSTR>(lParam)))
+#define WM_CHOOSEFONT_COMMAND WM_COMMAND
+#define HANDLE_WM_CHOOSEFONT_COMMAND(hwnd, wParam, lParam, fn) \
+    ((fn)((hwnd), static_cast<int>(LOWORD(wParam)), reinterpret_cast<HWND>(lParam), \
+          static_cast<UINT>(HIWORD(wParam))))
 #define WM_FONT_PICKER_ACTIVATE (WM_APP + 0x100)
 #define HANDLE_WM_FONT_PICKER_ACTIVATE(hwnd, wParam, lParam, fn) ((fn)(hwnd), 0L)
 
 namespace {
 
 constexpr LPCTSTR kHelperSwitch = TEXT("--font-picker");
-constexpr DWORD kExchangeVersion = 1;
+constexpr DWORD kExchangeVersion = 2;
 
 enum class WaitResult {
     Completed,
@@ -28,6 +32,7 @@ struct Exchange {
     volatile HWND dialog;
     LOGFONT font;
     LOGFONT fallback;
+    LONG initialDefault;
     volatile LONG status;
 };
 
@@ -41,6 +46,9 @@ HINSTANCE g_inst = nullptr;
 HWND g_parentDialog = nullptr;
 LOGFONT g_fallbackFont = { 0 };
 bool g_resetToFallback = false;
+LOGFONT g_lastAppliedFont = { 0 };
+bool g_lastAppliedDefault = false;
+bool g_applySucceeded = false;
 HFONT g_sampleFont = nullptr;
 FontPickerHelper::Result g_pendingDialogResult = FontPickerHelper::Result::Pending;
 LOGFONT g_dialogResult = { 0 };
@@ -50,6 +58,7 @@ constexpr LPCTSTR kFontTemplate = TEXT("FONTSELECTORDLG");
 constexpr LPCTSTR kFontSample = TEXT("0123456789");
 constexpr UINT_PTR kSampleSubclassId = 1;
 constexpr UINT_PTR kDlgSubclassId = 2;
+constexpr UINT_PTR kApplyButtonSubclassId = 3;
 
 void SetDialog(HWND dialog) {
     g_dialog = dialog;
@@ -161,6 +170,117 @@ void RefreshChooseFontSample(HWND dialog) {
     ApplyChooseFontSample(sample, lf);
 }
 
+[[nodiscard]] bool SameFontSelection(const LOGFONT& left, const LOGFONT& right) {
+    return lstrcmp(left.lfFaceName, right.lfFaceName) == 0 &&
+           left.lfWeight    == right.lfWeight &&
+           left.lfItalic    == right.lfItalic &&
+           left.lfUnderline == right.lfUnderline &&
+           left.lfStrikeOut == right.lfStrikeOut;
+}
+
+struct ApplyButtonSearch {
+    HWND button;
+};
+
+BOOL CALLBACK FindVisibleApplyButton(HWND window, LPARAM param) {
+    ApplyButtonSearch* const search = reinterpret_cast<ApplyButtonSearch*>(param);
+    if (!IsWindowVisible(window)) return TRUE;
+
+    const HWND apply = GetDlgItem(window, psh3);
+    if (!apply) return TRUE;
+
+    search->button = apply;
+    return FALSE;
+}
+
+HWND ChooseFontApplyButton(HWND dialog) {
+    const HWND direct = GetDlgItem(dialog, psh3);
+    if (IsWindowVisible(dialog) && direct) return direct;
+
+    ApplyButtonSearch search = { nullptr };
+    EnumThreadWindows(GetCurrentThreadId(), FindVisibleApplyButton,
+                      reinterpret_cast<LPARAM>(&search));
+    return search.button ? search.button : direct;
+}
+
+LRESULT CALLBACK ApplyButtonSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                         UINT_PTR id, DWORD_PTR ref);
+
+void PreserveAppliedSelection(HWND apply) {
+    if (!g_applySucceeded) return;
+
+    g_applySucceeded = false;
+    if (GetFocus() == apply) SetFocus(GetDlgItem(GetParent(apply), IDOK));
+    EnableWindow(apply, FALSE);
+}
+
+void OnApplyButtonNcDestroy(HWND apply) {
+    VERIFY(RemoveWindowSubclass(apply, ApplyButtonSubclassProc, kApplyButtonSubclassId));
+    FORWARD_WM_NCDESTROY(apply, DefSubclassProc);
+}
+
+LRESULT CALLBACK ApplyButtonSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                         UINT_PTR /*id*/, DWORD_PTR /*ref*/) {
+    switch (msg) {
+        HANDLE_MSG(hwnd, WM_NCDESTROY, OnApplyButtonNcDestroy);
+    }
+
+    const LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
+    PreserveAppliedSelection(hwnd);
+    return result;
+}
+
+void SetChooseFontApplyEnabled(HWND dialog, bool enabled) {
+    const HWND apply = ChooseFontApplyButton(dialog);
+    if (!apply) return;
+    VERIFY(SetWindowSubclass(
+        apply, ApplyButtonSubclassProc, kApplyButtonSubclassId, 0));
+    ShowWindow(apply, SW_SHOW);
+    if (!enabled && GetFocus() == apply) SetFocus(GetDlgItem(GetParent(apply), IDOK));
+    EnableWindow(apply, enabled ? TRUE : FALSE);
+}
+
+void UpdateChooseFontApplyState(HWND dialog) {
+    LOGFONT selected;
+    ZeroMemory(&selected, sizeof(selected));
+    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0,
+                reinterpret_cast<LPARAM>(&selected));
+
+    bool changed = g_resetToFallback != g_lastAppliedDefault;
+    if (!changed && !g_resetToFallback)
+        changed = !SameFontSelection(selected, g_lastAppliedFont);
+    SetChooseFontApplyEnabled(dialog, changed);
+}
+
+void ApplyChooseFontSelection(HWND dialog) {
+    LOGFONT selected;
+    ZeroMemory(&selected, sizeof(selected));
+    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0,
+                reinterpret_cast<LPARAM>(&selected));
+
+    if (!g_exchange) {
+        VERIFY(g_exchange != nullptr);
+        return;
+    }
+
+    const FontPickerHelper::Result result = g_resetToFallback
+        ? FontPickerHelper::Result::Default
+        : FontPickerHelper::Result::Chosen;
+    if (result == FontPickerHelper::Result::Chosen && selected.lfFaceName[0] == 0)
+        return;
+    if (result == FontPickerHelper::Result::Chosen) {
+        MoveMemory(&g_exchange->font, &selected, sizeof(g_exchange->font));
+        MoveMemory(&g_lastAppliedFont, &selected, sizeof(g_lastAppliedFont));
+    }
+
+    if (IsWindow(g_exchange->owner)) {
+        SendMessage(g_exchange->owner, FontPickerHelper::kApplySelectionMessage,
+                    static_cast<WPARAM>(result), 0);
+        g_lastAppliedDefault = result == FontPickerHelper::Result::Default;
+        g_applySucceeded = true;
+    }
+}
+
 // Drive the visible controls so comdlg32 rebuilds its internal LOGFONT for the fallback.
 [[nodiscard]] bool ResetChooseFontToFallback(HWND dialog) {
     const HWND nameCombo = GetDlgItem(dialog, cmb1);
@@ -218,20 +338,24 @@ void OnChooseFontCommand(HWND dialog, int id, HWND control, UINT notification) {
 
     FORWARD_WM_COMMAND(dialog, id, control, notification, DefSubclassProc);
     const bool comboChanged =
-        (id == cmb1 || id == cmb2) && notification == CBN_SELCHANGE;
+        (id == cmb1 || id == cmb2) &&
+        (notification == CBN_SELCHANGE || notification == CBN_EDITCHANGE);
     const bool effectToggled =
         (id == chx1 || id == chx2) && notification == BN_CLICKED;
     if (comboChanged || effectToggled) {
         RefreshChooseFontSample(dialog);
         g_resetToFallback = false;
+        UpdateChooseFontApplyState(dialog);
     }
 }
 
 LRESULT OnChooseFontNotify(HWND dialog, int idFrom, NMHDR* notification) {
     if (notification->idFrom == IDC_FONT_RESET_LINK &&
         (notification->code == NM_CLICK || notification->code == NM_RETURN)) {
-        if (ResetChooseFontToFallback(dialog))
+        if (ResetChooseFontToFallback(dialog)) {
             g_resetToFallback = true;
+            UpdateChooseFontApplyState(dialog);
+        }
         return 0;
     }
 
@@ -268,8 +392,11 @@ void OnChooseFontNcDestroy(HWND dialog) {
 }
 
 void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
-    if (show) RefreshChooseFontSample(dialog);
     FORWARD_WM_SHOWWINDOW(dialog, show, status, DefSubclassProc);
+    if (show) {
+        RefreshChooseFontSample(dialog);
+        UpdateChooseFontApplyState(dialog);
+    }
 }
 
 void OnActivateChooseFont(HWND dialog) {
@@ -277,6 +404,15 @@ void OnActivateChooseFont(HWND dialog) {
     SetActiveWindow(dialog);
     BringWindowToTop(dialog);
     SetForegroundWindow(dialog);
+}
+
+UINT_PTR OnChooseFontHookCommand(HWND dialog, int id, HWND /*control*/,
+                                 UINT notification) {
+    if (id == psh3 && notification == BN_CLICKED) {
+        ApplyChooseFontSelection(dialog);
+        return TRUE;
+    }
+    return FALSE;
 }
 
 LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
@@ -330,6 +466,7 @@ BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam)
             ApplyChooseFontSample(sample, *chooseFont->lpLogFont);
     }
     VERIFY(SetWindowSubclass(dialog, ChooseFontDlgSubclass, kDlgSubclassId, 0));
+    UpdateChooseFontApplyState(dialog);
 
     if (const HWND nameCombo = GetDlgItem(dialog, cmb1))
         SetFocus(nameCombo);
@@ -340,16 +477,21 @@ BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam)
 UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_INITDIALOG, OnChooseFontInitDialog);
+        HANDLE_MSG(hwnd, WM_CHOOSEFONT_COMMAND, OnChooseFontHookCommand);
         default: return 0;
     }
 }
 
 FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
-                                    const LOGFONT& initial, const LOGFONT& fallback,
+                                    const LOGFONT& initial, bool initialDefault,
+                                    const LOGFONT& fallback,
                                     LOGFONT& selected) {
     g_inst = inst;
     g_parentDialog = owner;
-    g_resetToFallback = false;
+    g_resetToFallback = initialDefault;
+    MoveMemory(&g_lastAppliedFont, &initial, sizeof(g_lastAppliedFont));
+    g_lastAppliedDefault = initialDefault;
+    g_applySucceeded = false;
     g_pendingDialogResult = FontPickerHelper::Result::Pending;
     ZeroMemory(&g_dialogResult, sizeof(g_dialogResult));
     MoveMemory(&g_fallbackFont, &fallback, sizeof(g_fallbackFont));
@@ -370,7 +512,7 @@ FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
     chooseFont.lpTemplateName = kFontTemplate;
     chooseFont.lpLogFont = &font;
     chooseFont.lpfnHook = ChooseFontHook;
-    chooseFont.Flags = CF_INITTOLOGFONTSTRUCT | CF_EFFECTS | CF_SCREENFONTS |
+    chooseFont.Flags = CF_INITTOLOGFONTSTRUCT | CF_EFFECTS | CF_SCREENFONTS | CF_APPLY |
                        CF_FORCEFONTEXIST | CF_ENABLEHOOK | CF_ENABLETEMPLATE;
 
     g_chooseFontResult = &font;
@@ -471,8 +613,9 @@ bool RunIfRequested(HINSTANCE inst) {
             if (InitCommonControlsEx(&icc)) {
                 LOGFONT selected;
                 ZeroMemory(&selected, sizeof(selected));
-                result = ShowDialog(inst, exchange->owner, exchange->font,
-                                    exchange->fallback, selected);
+                result = ShowDialog(
+                    inst, exchange->owner, exchange->font,
+                    exchange->initialDefault != 0, exchange->fallback, selected);
                 if (result == Result::Chosen)
                     MoveMemory(&exchange->font, &selected, sizeof(exchange->font));
             }
@@ -490,7 +633,7 @@ bool RunIfRequested(HINSTANCE inst) {
 }
 
 Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial,
-              const LOGFONT& fallback, LOGFONT& selected) {
+            bool initialDefault, const LOGFONT& fallback, LOGFONT& selected) {
     TCHAR mappingName[128];
     const LONG serial = ++g_exchangeSerial;
     wsprintf(mappingName, TEXT("Local\\WinNumTipFontPicker") APP_GUID TEXT("-%lu-%ld"),
@@ -518,6 +661,7 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial,
     exchange->owner = owner;
     MoveMemory(&exchange->font, &initial, sizeof(exchange->font));
     MoveMemory(&exchange->fallback, &fallback, sizeof(exchange->fallback));
+    exchange->initialDefault = initialDefault ? TRUE : FALSE;
 
     TCHAR exe[MAX_PATH];
     const DWORD exeLength = GetModuleFileName(nullptr, exe, ARRAYSIZE(exe));
@@ -581,6 +725,12 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial,
         return Result::Failed;
     }
     return result;
+}
+
+bool ReadAppliedFont(LOGFONT& selected) {
+    if (!g_exchange || g_isHelperProcess) return false;
+    MoveMemory(&selected, &g_exchange->font, sizeof(selected));
+    return selected.lfFaceName[0] != 0;
 }
 
 bool ActivateDialog() {
