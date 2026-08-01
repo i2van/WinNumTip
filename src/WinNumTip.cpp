@@ -122,7 +122,7 @@ extern "C" void Entry() {
 
     // Enforce a single running instance via a named mutex (UUID-based name).
     CreateMutex(nullptr, TRUE, kMutexName);
-    if (GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(0);
+    if (GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
 
     // Per-Monitor-V2 DPI awareness is declared in WinNumTip.manifest (applied at
     // startup), so no SetProcessDpiAwarenessContext call is needed here.
