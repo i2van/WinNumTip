@@ -46,8 +46,8 @@ HWND Find() {
     return FindWindow(TEXT("Shell_TrayWnd"), nullptr);
 }
 
-bool Obscured(HWND tray) {
-    if (!IsWindowVisible(tray)) return true;
+bool Obscured(HWND taskbar) {
+    if (!IsWindowVisible(taskbar)) return true;
     QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
     if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
         if (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
@@ -71,11 +71,11 @@ bool GetPos(RECT& rc, UINT& edge) {
     return true;
 }
 
-int CollectButtonRects(IUIAutomation* uia, HWND tray, RECT* out, int max) {
+int CollectButtonRects(IUIAutomation* uia, HWND taskbar, RECT* out, int max) {
     if (!uia) return 0;
 
-    IUIAutomationElement* trayEl = nullptr;
-    if (FAILED(uia->ElementFromHandle(tray, &trayEl)) || !trayEl) return 0;
+    IUIAutomationElement* taskbarEl = nullptr;
+    if (FAILED(uia->ElementFromHandle(taskbar, &taskbarEl)) || !taskbarEl) return 0;
 
     // Match the taskbar app buttons by class name.
     VARIANT vName;
@@ -83,8 +83,9 @@ int CollectButtonRects(IUIAutomation* uia, HWND tray, RECT* out, int max) {
     vName.bstrVal = SysAllocString(kTaskButtonClass);
 
     // On-screen guard for the strict query: an app configured to close/minimize to the
-    // tray (e.g. Outlook) can leave an off-screen button peer in the UI Automation
-    // tree, which would otherwise draw a phantom number over an empty taskbar spot.
+    // notification area (e.g. Outlook) can leave an off-screen button peer in the UI
+    // Automation tree, which would otherwise draw a phantom number over an empty taskbar
+    // spot.
     VARIANT vOnScreen;
     vOnScreen.vt = VT_BOOL;
     vOnScreen.boolVal = VARIANT_FALSE;   // IsOffscreen == FALSE
@@ -100,9 +101,9 @@ int CollectButtonRects(IUIAutomation* uia, HWND tray, RECT* out, int max) {
     int count = 0;
 
     // Primary: buttons matched by class name AND reported on-screen by UI Automation.
-    // This is the common path and keeps phantom minimize-to-tray peers out.
+    // This is the common path and keeps phantom notification area peers out.
     if (condStrict)
-        count = CollectRects(trayEl, condStrict, nullptr, out, max);
+        count = CollectRects(taskbarEl, condStrict, nullptr, out, max);
 
     // Fallback: some taskbar states transiently report every button's UI Automation
     // IsOffscreen as TRUE (e.g. right after a foreground / virtual-desktop switch, or
@@ -113,9 +114,9 @@ int CollectButtonRects(IUIAutomation* uia, HWND tray, RECT* out, int max) {
     // taskbar, so real buttons still show while genuine off-taskbar phantoms are
     // excluded geometrically.
     if (count == 0 && condName) {
-        RECT trayRc;
-        if (GetWindowRect(tray, &trayRc))
-            count = CollectRects(trayEl, condName, &trayRc, out, max);
+        RECT taskbarRc;
+        if (GetWindowRect(taskbar, &taskbarRc))
+            count = CollectRects(taskbarEl, condName, &taskbarRc, out, max);
     }
 
     if (condStrict) condStrict->Release();
@@ -123,7 +124,7 @@ int CollectButtonRects(IUIAutomation* uia, HWND tray, RECT* out, int max) {
     if (condName) condName->Release();
 
     SysFreeString(vName.bstrVal);
-    trayEl->Release();
+    taskbarEl->Release();
 
     return count;
 }

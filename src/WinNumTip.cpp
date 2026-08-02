@@ -1,9 +1,9 @@
-// WinNumTip - show Win+<num> badges next to taskbar buttons while Win is held.
+// WinNumTip - show Win+<num> tips next to taskbar buttons while Win is held.
 //
 // Built as C++ without the C runtime (no stdlib): only Win32 / COM / UI Automation.
 // This translation unit is the application entry point: it owns the process-wide
 // state (COM apartment, UI Automation, the hidden message window) and wires the
-// modules together (Taskbar / Overlay / Tray / Keyboard).
+// modules together (Taskbar / Overlay / NotifyIcon / Keyboard).
 
 #include "stdafx.h"
 
@@ -16,11 +16,11 @@
 #include "PreferencesDialog.h"
 #include "resource.h"
 
-// windowsx-style message cracker for the custom WM_TRAYICON message, so it can be
+// windowsx-style message cracker for the custom WM_NOTIFYICON message, so it can be
 // dispatched with HANDLE_MSG just like the standard ones. Kept here as this is the
 // only translation unit that dispatches it.
-//   WM_TRAYICON handler signature:       void fn(HWND hwnd, UINT mouseMsg)
-#define HANDLE_WM_TRAYICON(hwnd, wParam, lParam, fn) ((fn)((hwnd), (UINT)LOWORD(lParam)), 0L)
+//   WM_NOTIFYICON handler signature:       void fn(HWND hwnd, UINT mouseMsg)
+#define HANDLE_WM_NOTIFYICON(hwnd, wParam, lParam, fn) ((fn)((hwnd), (UINT)LOWORD(lParam)), 0L)
 
 namespace {
 
@@ -51,7 +51,7 @@ void ApplyPreferenceChanges() {
 }
 
 // Standard messages are dispatched through the windowsx.h HANDLE_MSG crackers;
-// WM_TRAYICON is a custom (WM_APP-based) message handled the same way.
+// WM_NOTIFYICON is a custom (WM_APP-based) message handled the same way.
 void OnCommand(HWND hwnd, int id, HWND /*ctl*/, UINT /*notify*/) {
     switch (id) {
         case IDM_PREFERENCES:
@@ -86,7 +86,7 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     switch (msg) {
         HANDLE_MSG(hwnd, WM_TIMER, OnTimer);
-        HANDLE_MSG(hwnd, WM_TRAYICON, [](HWND h, UINT mouse) {
+        HANDLE_MSG(hwnd, WM_NOTIFYICON, [](HWND h, UINT mouse) {
             if (mouse == WM_LBUTTONDBLCLK) {
                 VERIFY(PostMessage(h, WM_COMMAND, MAKEWPARAM(IDM_PREFERENCES, 0), 0));
                 return;
@@ -137,7 +137,8 @@ extern "C" void Entry() {
     // Load persisted preferences (INI next to the exe) before the overlay is first shown.
     Preferences::Load();
 
-    // Hidden message-only window that hosts the tray icon and drives the overlay.
+    // Hidden message-only window that hosts the notification area icon and drives the
+    // overlay.
     WNDCLASSEX mc;
     ZeroMemory(&mc, sizeof(mc));
     mc.cbSize = sizeof(mc);

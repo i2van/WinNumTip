@@ -4,8 +4,8 @@
 
 namespace {
 
-// NOTIFYICONDATA uID for our single tray icon.
-constexpr UINT kTrayId = 1;
+// NOTIFYICONDATA uID for our single notification area icon.
+constexpr UINT kNotifyIconId = 1;
 
 NOTIFYICONDATA g_nid;
 HINSTANCE      g_inst = nullptr;
@@ -26,9 +26,9 @@ void Add(HINSTANCE inst, HWND msgWnd) {
     ZeroMemory(&g_nid, sizeof(g_nid));
     g_nid.cbSize = sizeof(g_nid);
     g_nid.hWnd = msgWnd;
-    g_nid.uID = kTrayId;
+    g_nid.uID = kNotifyIconId;
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-    g_nid.uCallbackMessage = WM_TRAYICON;
+    g_nid.uCallbackMessage = WM_NOTIFYICON;
     // LoadImage (LR_DEFAULTCOLOR, not LR_SHARED) yields a caller-owned icon we must
     // DestroyIcon; free any previously-owned one first (Add re-runs on Explorer
     // restart). The LoadIcon fallback returns a shared icon that must not be destroyed.
@@ -64,7 +64,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
 
     if(!show) return;
 
-    const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_TRAYMENU));
+    const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_NOTIFYICONMENU));
     if (!menu) return;
     const HMENU sub = GetSubMenu(menu, 0);
     VERIFY(SetMenuDefaultItem(sub, IDM_PREFERENCES, FALSE));

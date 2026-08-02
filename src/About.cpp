@@ -60,8 +60,9 @@ void OnDestroy(HWND /*dlg*/) {
 
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     // The "Preferences" action link (no href) closes About and opens the Preferences dialog
-    // the way the tray menu does: post IDM_PREFERENCES to our owner (the hidden message
-    // window), which runs the same WM_COMMAND path (see WinNumTip.cpp's OnCommand).
+    // the way the notification area menu does: post IDM_PREFERENCES to our owner (the
+    // hidden message window), which runs the same WM_COMMAND path (see WinNumTip.cpp's
+    // OnCommand).
     // EndDialog merely flags About's modal loop to exit -- the flag is checked before the
     // loop retrieves its next message -- so About tears down first and the posted command is
     // picked up afterwards by the main message loop. Preferences therefore opens fresh and
@@ -122,8 +123,8 @@ namespace About {
 void Show(HINSTANCE inst, HWND owner) {
     // Only one About dialog at a time: if it's already up, bring it forward -- but via its
     // last active popup, so if a Preferences dialog was opened from it (and is thus on top),
-    // re-invoking About (e.g. from the tray) resurfaces that Preferences dialog rather than
-    // hiding it behind About.
+    // re-invoking About (e.g. from the notification area) resurfaces that Preferences
+    // dialog rather than hiding it behind About.
     if (g_dlg) { ForegroundDialog(g_dlg); return; }
     VERIFY(DialogBoxParam(inst, MAKEINTRESOURCE(IDD_ABOUT), owner, AboutProc, reinterpret_cast<LPARAM>(inst)) != -1);
     g_dlg = nullptr;

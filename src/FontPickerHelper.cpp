@@ -95,7 +95,7 @@ void OnFontSampleNcDestroy(HWND hwnd) {
     FORWARD_WM_NCDESTROY(hwnd, DefSubclassProc);
 }
 
-// Keep comdlg32's Sample control text fixed to the badge digits.
+// Keep comdlg32's Sample control text fixed to the tip digits.
 LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                         UINT_PTR /*id*/, DWORD_PTR /*ref*/) {
     switch (msg) {

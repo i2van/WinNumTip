@@ -4,9 +4,10 @@
 namespace {
 
 // INI section/key for the persisted preferences. The file lives next to the executable.
-constexpr LPCTSTR kSection      = TEXT("Preferences");
-constexpr LPCTSTR kKeyLabelSize = TEXT("LabelSizePercent");
-constexpr LPCTSTR kKeyInvert    = TEXT("InvertColors");
+constexpr LPCTSTR kSection          = TEXT("Preferences");
+constexpr LPCTSTR kKeyTipSize       = TEXT("TipSizePercent");
+constexpr LPCTSTR kLegacyKeyTipSize = TEXT("LabelSizePercent");
+constexpr LPCTSTR kKeyInvert        = TEXT("InvertColors");
 constexpr LPCTSTR kKeyFontFace      = TEXT("FontFace");
 constexpr LPCTSTR kKeyFontWeight    = TEXT("FontWeight");
 constexpr LPCTSTR kKeyFontItalic    = TEXT("FontItalic");
@@ -19,8 +20,8 @@ constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 // Full path of the INI file next to the executable, built once by Load().
 TCHAR g_iniPath[MAX_PATH] = { 0 };
 
-// Cached label-size percentage in [0, 100]; mirrors the INI value.
-int g_labelPercent = 0;
+// Cached tip-size percentage in [0, 100]; mirrors the INI value.
+int g_tipPercent = 0;
 
 // Cached invert-colors flag; mirrors the INI value.
 bool g_invert = false;
@@ -107,7 +108,8 @@ namespace Preferences {
 
 void Load() {
     BuildIniPath();
-    g_labelPercent = ClampPercent(ReadInt(kKeyLabelSize, 0));
+    const int legacyTipPercent = ReadInt(kLegacyKeyTipSize, 0);
+    g_tipPercent = ClampPercent(ReadInt(kKeyTipSize, legacyTipPercent));
     g_invert       = ReadBool(kKeyInvert, false);
     g_refreshMs    = Clamp(ReadInt(kKeyRefreshMs, kDefaultRefreshMs), kMinRefreshMs, kMaxRefreshMs);
     g_pollMs       = Clamp(ReadInt(kKeyPollMs, kDefaultPollMs), kMinPollMs, kMaxPollMs);
@@ -126,13 +128,14 @@ void Load() {
     }
 }
 
-int LabelSizePercent() {
-    return g_labelPercent;
+int TipSizePercent() {
+    return g_tipPercent;
 }
 
-void SetLabelSizePercent(int percent) {
-    g_labelPercent = ClampPercent(percent);
-    WriteInt(kKeyLabelSize, g_labelPercent);
+void SetTipSizePercent(int percent) {
+    g_tipPercent = ClampPercent(percent);
+    WriteInt(kKeyTipSize, g_tipPercent);
+    WriteString(kLegacyKeyTipSize, nullptr);
 }
 
 bool InvertColors() {

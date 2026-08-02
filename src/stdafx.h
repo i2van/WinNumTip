@@ -21,7 +21,7 @@
 // Custom application message posted by the shell to the message window and dispatched
 // there. Defined as a macro (not a namespaced constant) so the windowsx.h HANDLE_MSG
 // cracker can token-paste HANDLE_##message and use it as a switch's case label.
-#define WM_TRAYICON       (WM_APP + 1)   // tray icon callback
+#define WM_NOTIFYICON     (WM_APP + 1)   // notification area icon callback
 
 // A single app-wide GUID appended to every unique, globally-named resource this
 // process creates (window classes, the single-instance mutex, and any future

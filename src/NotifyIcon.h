@@ -1,13 +1,13 @@
 #pragma once
 
-// Notification-area (system tray) icon and its context menu.
+// Notification area icon and its context menu.
 namespace NotifyIcon {
 
-// Add the notification-area icon, routing its callbacks to 'msgWnd'. Also registers
+// Add the notification area icon, routing its callbacks to 'msgWnd'. Also registers
 // for the "TaskbarCreated" broadcast so the icon can be restored if Explorer restarts.
 void Add(HINSTANCE inst, HWND msgWnd);
 
-// Remove the notification-area icon.
+// Remove the notification area icon.
 void Remove();
 
 // Show the context menu at the cursor. Commands are posted to 'commandTarget'; when

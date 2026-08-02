@@ -67,9 +67,9 @@ END
 // Menu
 //
 
-IDR_TRAYMENU MENU
+IDR_NOTIFYICONMENU MENU
 BEGIN
-    POPUP "TrayContext"
+    POPUP ""
     BEGIN
         MENUITEM "&Preferences...",             IDM_PREFERENCES
         MENUITEM "&About",                      IDM_ABOUT
@@ -105,21 +105,21 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | DS_CONTEXTHELP | WS_POPUP | WS_CA
 CAPTION "WinNumTip Preferences"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    LTEXT           "Label &size:",IDC_SIZE_LABEL,7,8,110,10
+    LTEXT           "Tip &size:",IDC_SIZE_LABEL,7,8,110,10
     RTEXT           "%d%%",IDC_SIZE_VALUE,193,8,70,10
     CONTROL         "",IDC_SIZE_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,21,256,26
     LTEXT           "Default",IDC_STATIC,7,48,80,9
     RTEXT           "Taskbar button",IDC_STATIC,173,48,90,9
-    LTEXT           "Shortcuts &refresh:",IDC_REFRESH_LABEL,7,65,110,10
+    LTEXT           "Tips &refresh:",IDC_REFRESH_LABEL,7,65,110,10
     RTEXT           "%d ms",IDC_REFRESH_VALUE,193,65,70,10
     CONTROL         "",IDC_REFRESH_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,78,256,24
     LTEXT           "&Win key poll:",IDC_POLL_LABEL,7,107,110,10
     RTEXT           "%d ms",IDC_POLL_VALUE,193,107,70,10
     CONTROL         "",IDC_POLL_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,120,256,24
     CONTROL         "In&vert colors",IDC_INVERT,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,150,253,10
-    LTEXT           "&Font:",IDC_FONT_LABEL,7,167,17,10
+    LTEXT           "Tip &font:",IDC_FONT_LABEL,7,167,27,8
     PUSHBUTTON      "Select...",IDC_FONT_BUTTON,213,164,50,14
-    LTEXT           "Default",IDC_FONT_NAME,27,165,182,14,SS_NOPREFIX | SS_CENTERIMAGE | SS_ENDELLIPSIS | WS_BORDER
+    LTEXT           "Default",IDC_FONT_NAME,36,165,173,14,SS_NOPREFIX | SS_CENTERIMAGE | SS_ENDELLIPSIS | WS_BORDER
     CONTROL         "<a>Reset to defaults</a>",IDC_RESET,"SysLink",WS_GROUP | WS_TABSTOP,7,191,91,10
     DEFPUSHBUTTON   "OK",IDOK,105,187,50,14,WS_GROUP
     PUSHBUTTON      "Cancel",IDCANCEL,159,187,50,14
@@ -128,7 +128,7 @@ END
 
 FONTSELECTORDLG DIALOGEX 11, 47, 258, 267
 STYLE DS_SETFONT | DS_MODALFRAME | DS_3DLOOK | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Select Font"
+CAPTION "Select Tip Font"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     LTEXT           "&Font:",1088,6,6,72,8

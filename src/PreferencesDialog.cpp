@@ -42,9 +42,9 @@ int g_minPct = kMinSliderPct;
 
 // Value-readout templates captured from the dialog's own statics in OnInitDialog (before the
 // first update overwrites them) so all display text lives in WinNumTip.rc: the size readout's
-// "%d%%" and each interval readout's "%d ms". g_defaultLabel holds IDS_DEFAULT ("Default"),
+// "%d%%" and each interval readout's "%d ms". g_defaultText holds IDS_DEFAULT ("Default"),
 // shown for the size readout at the slider minimum.
-TCHAR g_defaultLabel[16];
+TCHAR g_defaultText[16];
 TCHAR g_sizeFormat[16];
 TCHAR g_refreshFormat[16];
 TCHAR g_pollFormat[16];
@@ -54,7 +54,7 @@ TCHAR g_pollFormat[16];
 void UpdateValueText(HWND dlg) {
     const int pos = static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0));
     TCHAR buf[16];
-    if (pos <= g_minPct) lstrcpyn(buf, g_defaultLabel, ARRAYSIZE(buf));
+    if (pos <= g_minPct) lstrcpyn(buf, g_defaultText, ARRAYSIZE(buf));
     else                 wsprintf(buf, g_sizeFormat, pos);
     VERIFY(SetDlgItemText(dlg, IDC_SIZE_VALUE, buf));
 }
@@ -75,7 +75,7 @@ void SetApplyEnabled(HWND dlg, bool enabled) {
 }
 
 void UpdateApplyState(HWND dlg) {
-    int savedSize = Preferences::LabelSizePercent();
+    int savedSize = Preferences::TipSizePercent();
     if (savedSize < g_minPct) savedSize = g_minPct;
     else if (savedSize > Preferences::kMaxPercent) savedSize = Preferences::kMaxPercent;
 
@@ -89,7 +89,7 @@ void UpdateApplyState(HWND dlg) {
 }
 
 void SaveValues(HWND dlg) {
-    Preferences::SetLabelSizePercent(
+    Preferences::SetTipSizePercent(
         static_cast<int>(SendDlgItemMessage(dlg, IDC_SIZE_SLIDER, TBM_GETPOS, 0, 0)));
     Preferences::SetRefreshIntervalMs(
         static_cast<int>(SendDlgItemMessage(dlg, IDC_REFRESH_SLIDER, TBM_GETPOS, 0, 0)));
@@ -117,26 +117,26 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
     // Capture the value-readout templates from the dialog resource before the first update
     // overwrites them, and load the size readout's "Default" text from the string table.
-    LoadStr(inst, IDS_DEFAULT, g_defaultLabel);
+    LoadStr(inst, IDS_DEFAULT, g_defaultText);
     VERIFY(GetDlgItemText(dlg, IDC_SIZE_VALUE,    g_sizeFormat,    ARRAYSIZE(g_sizeFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_REFRESH_VALUE, g_refreshFormat, ARRAYSIZE(g_refreshFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_POLL_VALUE,    g_pollFormat,    ARRAYSIZE(g_pollFormat)));
 
     // Resolve the default's share of a full taskbar button from the current taskbar
     // (shared with the renderer); it becomes the slider's minimum so every selectable
-    // value changes the strip. The "Label size:" caption is fixed and orientation-neutral
+    // value changes the strip. The "Tip size:" caption is fixed and orientation-neutral
     // (the strip is a height for a horizontal taskbar but a width for a side-docked one),
     // so no runtime relabeling is needed.
     int defThick = 0, btnThick = 0;
     bool vertical = false;
     g_minPct = kMinSliderPct;
-    if (Overlay::LabelSizeBounds(defThick, btnThick, vertical) && btnThick > 0) {
+    if (Overlay::TipSizeBounds(defThick, btnThick, vertical) && btnThick > 0) {
         g_minPct = MulDiv(defThick, Preferences::kMaxPercent, btnThick);
         if (g_minPct < kMinSliderPct) g_minPct = kMinSliderPct;
         else if (g_minPct > Preferences::kMaxPercent) g_minPct = Preferences::kMaxPercent;
     }
 
-    int cur = Preferences::LabelSizePercent();
+    int cur = Preferences::TipSizePercent();
     if (cur < g_minPct) cur = g_minPct; else if (cur > Preferences::kMaxPercent) cur = Preferences::kMaxPercent;
 
     const HWND tb = GetDlgItem(dlg, IDC_SIZE_SLIDER);
@@ -169,7 +169,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     FontPicker::Init(dlg, inst);
     UpdateApplyState(dlg);
 
-    // Focus the trackbar so the label size can be adjusted with the arrow keys as soon as
+    // Focus the trackbar so the tip size can be adjusted with the arrow keys as soon as
     // the dialog opens; returning FALSE tells the dialog manager to keep this focus rather
     // than moving it to the default first tab-stop itself.
     SetFocus(tb);

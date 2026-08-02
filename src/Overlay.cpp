@@ -7,11 +7,11 @@ namespace {
 
 LPCTSTR const kOverlayClass = TEXT("WinNumTipOverlay-") APP_GUID;
 
-// Win+0..9: 10 is the most taskbar buttons we label.
-constexpr int kMaxBadges = 10;
+// Win+0..9: 10 is the most taskbar buttons we show tips for.
+constexpr int kMaxTips = 10;
 
-// Control id used to tell a separator static apart from a number-label static in
-// WM_CTLCOLORSTATIC (labels are transparent; separators are a solid filled line).
+// Control id used to tell a separator static apart from a number-tip static in
+// WM_CTLCOLORSTATIC (tips are transparent; separators are a solid filled line).
 constexpr int kSepId = 1;
 
 // Module state. The overlay window lives for the whole "Win held" session so its
@@ -29,12 +29,12 @@ COLORREF g_textColor = 0;                      // resolved from the theme / syst
 bool     g_active    = false;                  // true between Show (Win down) and Hide (Win up)
 
 // Retained so the refresh timer can rebuild the bar in place when the taskbar's
-// buttons change while it is shown (e.g. an app minimizes/closes to the tray, which
-// removes its button and would otherwise leave an orphaned number behind).
+// buttons change while it is shown (e.g. an app minimizes/closes to the notification
+// area, which removes its button and would otherwise leave an orphaned number behind).
 IUIAutomation* g_uia   = nullptr;
 HINSTANCE      g_inst  = nullptr;
 int            g_snapN = 0;                     // button count captured when the bar was built
-RECT           g_snap[kMaxBadges];              // button rects captured when the bar was built
+RECT           g_snap[kMaxTips];              // button rects captured when the bar was built
 // Timer id for the persistent refresh timer; its interval is the user's "refresh interval"
 // preference (Preferences::RefreshIntervalMs), re-applied on each Show or Apply.
 constexpr UINT_PTR kRefreshTimer = 1;
@@ -53,7 +53,7 @@ inline void ArmRefreshTimer() {
     VERIFY(SetTimer(g_overlay, kRefreshTimer, Preferences::RefreshIntervalMs(), nullptr));
 }
 
-// Destroy all child controls (number labels + separators) of the overlay window.
+// Destroy all child controls (number tips + separators) of the overlay window.
 void DestroyChildren(HWND wnd) {
     HWND c;
     while ((c = GetWindow(wnd, GW_CHILD)) != nullptr) DestroyWindow(c);
@@ -68,7 +68,7 @@ void FreeResources() {
     if (g_bgBrush) { DeleteObject(g_bgBrush); g_bgBrush = nullptr; }
 }
 
-// Compute the label-size bounds for a taskbar at 'tr' docked on 'edge' at 'dpi': the slim
+// Compute the tip-size bounds for a taskbar at 'tr' docked on 'edge' at 'dpi': the slim
 // default strip thickness and the full taskbar-button thickness, both along the axis
 // perpendicular to the taskbar. The button thickness is taken from the taskbar's own
 // cross-axis extent (side buttons span its full width; top/bottom buttons are about its
@@ -86,7 +86,7 @@ void ComputeStripBounds(const RECT& tr, UINT edge, UINT dpi,
 // Paint the bar background: in invert-colors mode a solid fill with the number color;
 // otherwise the taskbar theme (falling back to the 3D face color when the theme is
 // unavailable, e.g. classic mode). Used from both WM_ERASEBKGND and WM_PRINTCLIENT so
-// DrawThemeParentBackground can show it behind the labels.
+// DrawThemeParentBackground can show it behind the tips.
 void PaintBackground(HWND hwnd, HDC hdc) {
     RECT rc;
     GetClientRect(hwnd, &rc);
@@ -108,7 +108,7 @@ void OnPrintClient(HWND hwnd, HDC hdc) {
 
 // WM_CTLCOLORSTATIC. A separator static is a thin control filled with the solid line
 // brush; the system fills its whole client rect with the returned brush, giving a
-// crisp line that contrasts with the bar (no custom drawing needed). A number label
+// crisp line that contrasts with the bar (no custom drawing needed). A number tip
 // instead gets the parent's themed background painted into its DC (via
 // DrawThemeParentBackground) and a hollow brush, so its text draws transparently.
 HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
@@ -134,8 +134,8 @@ HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
 void OnTimer(HWND /*hwnd*/, UINT id) {
     if (id != kRefreshTimer) return;
 
-    RECT cur[kMaxBadges];
-    const int m = CollectCurrent(cur, kMaxBadges);
+    RECT cur[kMaxTips];
+    const int m = CollectCurrent(cur, kMaxTips);
     bool changed = m != g_snapN;
     for (int i = 0; !changed && i < m; ++i)
         if (!EqualRect(&cur[i], &g_snap[i])) changed = true;
@@ -159,9 +159,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         0, 0, 10, 10, nullptr, nullptr, inst, nullptr);
 }
 
-// Create a themed STATIC child (a number label or a separator line) relative to the
+// Create a themed STATIC child (a number tip or a separator line) relative to the
 // overlay origin, wired up to the shared taskbar font. 'id' distinguishes separators
-// (kSepId) from labels (0) for WM_CTLCOLORSTATIC.
+// (kSepId) from tips (0) for WM_CTLCOLORSTATIC.
 void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
                int x, int y, int w, int h, int id = 0) {
     const HWND s = CreateWindowEx(0, TEXT("STATIC"), text,
@@ -286,16 +286,16 @@ void ApplyPreferences() {
     Refresh();
 }
 
-// Report the current taskbar's label-size bounds (see Overlay.h). Shares
+// Report the current taskbar's tip-size bounds (see Overlay.h). Shares
 // ComputeStripBounds with the renderer so the dialog's percentages map to the same
 // thicknesses the bar will draw. No UI Automation needed -- the bounds come from the
 // taskbar's own geometry.
-bool LabelSizeBounds(int& defThick, int& btnThick, bool& vertical) {
-    const HWND tray = Taskbar::Find();
+bool TipSizeBounds(int& defThick, int& btnThick, bool& vertical) {
+    const HWND taskbar = Taskbar::Find();
     RECT tr;
     UINT edge;
-    if (!tray || !Taskbar::GetPos(tr, edge)) return false;
-    const UINT dpi = GetDpiForWindow(tray) ? GetDpiForWindow(tray) : USER_DEFAULT_SCREEN_DPI;
+    if (!taskbar || !Taskbar::GetPos(tr, edge)) return false;
+    const UINT dpi = GetDpiForWindow(taskbar) ? GetDpiForWindow(taskbar) : USER_DEFAULT_SCREEN_DPI;
     ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
     return true;
 }
@@ -305,10 +305,10 @@ bool LabelSizeBounds(int& defThick, int& btnThick, bool& vertical) {
 namespace {
 
 int CollectCurrent(RECT* out, int max) {
-    const HWND tray = Taskbar::Find();
-    if (!tray || Taskbar::Obscured(tray)) return 0;
+    const HWND taskbar = Taskbar::Find();
+    if (!taskbar || Taskbar::Obscured(taskbar)) return 0;
 
-    return Taskbar::CollectButtonRects(g_uia, tray, out, max);
+    return Taskbar::CollectButtonRects(g_uia, taskbar, out, max);
 }
 
 // Hide the bar's contents while keeping the window and its timer alive, so the session
@@ -324,30 +324,30 @@ void ApplyEmpty() {
 // Rebuild the bar's contents in place for the current taskbar state. The window
 // already exists (created by Show); on every refresh its child controls and per-show
 // resources are swapped with painting suspended, so numbers realign without flicker.
-// When there are no buttons to label the window is hidden but the session continues.
+// When there are no buttons to annotate the window is hidden but the session continues.
 void Refresh() {
     if (!g_overlay) return;
 
-    RECT btn[kMaxBadges];
-    const int n = CollectCurrent(btn, kMaxBadges);
+    RECT btn[kMaxTips];
+    const int n = CollectCurrent(btn, kMaxTips);
     if (n == 0) { ApplyEmpty(); return; }
 
-    const HWND tray = Taskbar::Find();
+    const HWND taskbar = Taskbar::Find();
     RECT tr;
     UINT edge;
-    if (!tray || !Taskbar::GetPos(tr, edge)) { ApplyEmpty(); return; }
+    if (!taskbar || !Taskbar::GetPos(tr, edge)) { ApplyEmpty(); return; }
 
     // Strip thickness (perpendicular to the taskbar) from the shared bounds: a slim
-    // default up to a full taskbar-button-sized cell. The "Label size" preference is the
-    // percentage of that full button thickness (Preferences::LabelSizePercent), clamped so
+    // default up to a full taskbar-button-sized cell. The "Tip size" preference is the
+    // percentage of that full button thickness (Preferences::TipSizePercent), clamped so
     // the strip is never thinner than the default -- the dialog only offers percentages at
     // or above the default's share, so every selectable value visibly changes the strip.
-    const UINT dpi = GetDpiForWindow(tray) ? GetDpiForWindow(tray) : USER_DEFAULT_SCREEN_DPI;
+    const UINT dpi = GetDpiForWindow(taskbar) ? GetDpiForWindow(taskbar) : USER_DEFAULT_SCREEN_DPI;
     int defThick, btnThick;
     bool vertical;
     ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
 
-    int p = Preferences::LabelSizePercent();
+    int p = Preferences::TipSizePercent();
     if (p < Preferences::kMinPercent) p = Preferences::kMinPercent;
     else if (p > Preferences::kMaxPercent) p = Preferences::kMaxPercent;
     int thick = MulDiv(btnThick, p, Preferences::kMaxPercent);
@@ -406,7 +406,7 @@ void Refresh() {
     }
 
     // Shell/taskbar UI font (SPI_GETNONCLIENTMETRICS, DPI-aware) so the numbers match the
-    // taskbar's own text; fall back to the system default GUI font. When the "Label size"
+    // taskbar's own text; fall back to the system default GUI font. When the "Tip size"
     // preference has grown the strip past the default, the font is scaled up by the same
     // ratio so the numbers grow to fill the larger cell -- capped to the cell's fixed
     // cross extent (button width for a horizontal bar, button height for a vertical one)
@@ -450,9 +450,9 @@ void Refresh() {
         g_ownFont = false;
     }
 
-    // Pass 1: a centered number label per taskbar button (labels span the full button
+    // Pass 1: a centered number tip per taskbar button (tips span the full button
     // width and meet at the boundaries). Pass 2: a separator line on each boundary,
-    // created last so it sits on top of the labels' Z-order and is not occluded. Each
+    // created last so it sits on top of the tips' Z-order and is not occluded. Each
     // separator is a plain STATIC filled with the solid line brush (via
     // WM_CTLCOLORSTATIC): a neutral divider midway between the text and bar colors so
     // it is clearly visible yet softer than the numbers. Its thickness comes from the
@@ -466,7 +466,7 @@ void Refresh() {
 
     for (int i = 0; i < n; ++i) {
         TCHAR s[2];
-        s[0] = i < kMaxBadges - 1 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
+        s[0] = i < kMaxTips - 1 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
         s[1] = 0;
         if (vertical) {
             const int y = btn[i].top - ov.top;

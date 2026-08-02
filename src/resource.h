@@ -3,7 +3,7 @@
 // Used by WinNumTip.rc
 //
 #define IDI_APPICON                     1
-#define IDR_TRAYMENU                    101
+#define IDR_NOTIFYICONMENU              101
 #define IDD_ABOUT                       102
 #define IDD_PREFERENCES                 103
 #define IDS_TOOLTIP                     201

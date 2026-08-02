@@ -1,7 +1,7 @@
 #pragma once
 
 // The modal Preferences dialog (IDD_PREFERENCES): edits the persisted user preferences
-// (overlay label size, invert colors, font, and the refresh/poll timer intervals). The
+// (overlay tip size, invert colors, font, and the refresh/poll timer intervals). The
 // values themselves live in the Preferences model.
 namespace PreferencesDialog {
 
