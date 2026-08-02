@@ -44,6 +44,20 @@ immediately.
 
   > `WinNumTip.ini` keys: `TipSizePercent`
 
+- **Tip font** - click **Select...** to pick the typeface and style (weight, italic, underline,
+  strikeout) the numbers are drawn with; the selected name is previewed in that font next to
+  the button. Only the face and style are used - the tip size stays governed by **Tip
+  size** - and the color follows **Invert colors**. When no font is chosen the taskbar's own
+  font is used (**Default**). When the selection changes, click **Apply** in the font selector
+  to save the current font without closing the selector.
+
+  > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
+
+- **Invert colors** - swaps the strip and number colors for a highlighted look. Off by
+  default.
+
+  > `WinNumTip.ini` keys: `InvertColors`
+
 - **Tips refresh** - how often, in milliseconds, the numbered tips re-sync with the
   taskbar buttons while shown, so the numbers stay aligned when a button appears,
   disappears, or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
@@ -56,20 +70,6 @@ immediately.
   or releasing `Win` but polls more often.
 
   > `WinNumTip.ini` keys: `PollIntervalMs`
-
-- **Invert colors** - swaps the strip and number colors for a highlighted look. Off by
-  default.
-
-  > `WinNumTip.ini` keys: `InvertColors`
-
-- **Tip font** - click **Select...** to pick the typeface and style (weight, italic, underline,
-  strikeout) the numbers are drawn with; the selected name is previewed in that font next to
-  the button. Only the face and style are used - the tip size stays governed by **Tip
-  size** - and the color follows **Invert colors**. When no font is chosen the taskbar's own
-  font is used (**Default**). When the selection changes, click **Apply** in the font selector
-  to save the current font without closing the selector.
-
-  > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 
 - **Reset to defaults** - restores every option above to its factory default in the dialog;
   the change is saved only if you then click **Apply** or **OK**.

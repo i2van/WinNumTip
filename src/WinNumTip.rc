@@ -110,16 +110,16 @@ BEGIN
     CONTROL         "",IDC_SIZE_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,21,256,26
     LTEXT           "Default",IDC_STATIC,7,48,80,9
     RTEXT           "Taskbar button",IDC_STATIC,173,48,90,9
-    LTEXT           "Tips &refresh:",IDC_REFRESH_LABEL,7,65,110,10
-    RTEXT           "%d ms",IDC_REFRESH_VALUE,193,65,70,10
-    CONTROL         "",IDC_REFRESH_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,78,256,24
-    LTEXT           "&Win key poll:",IDC_POLL_LABEL,7,107,110,10
-    RTEXT           "%d ms",IDC_POLL_VALUE,193,107,70,10
-    CONTROL         "",IDC_POLL_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,120,256,24
-    CONTROL         "In&vert colors",IDC_INVERT,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,150,253,10
-    LTEXT           "Tip &font:",IDC_FONT_LABEL,7,167,27,8
-    PUSHBUTTON      "Select...",IDC_FONT_BUTTON,213,164,50,14
-    LTEXT           "Default",IDC_FONT_NAME,36,165,173,14,SS_NOPREFIX | SS_CENTERIMAGE | SS_ENDELLIPSIS | WS_BORDER
+    LTEXT           "Tip &font:",IDC_FONT_LABEL,7,67,27,8
+    PUSHBUTTON      "Select...",IDC_FONT_BUTTON,213,64,50,14
+    LTEXT           "Default",IDC_FONT_NAME,37,64,172,15,SS_NOPREFIX | SS_CENTERIMAGE | SS_ENDELLIPSIS | WS_BORDER
+    CONTROL         "In&vert colors",IDC_INVERT,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,86,253,10
+    LTEXT           "Tips &refresh:",IDC_REFRESH_LABEL,7,104,110,10
+    RTEXT           "%d ms",IDC_REFRESH_VALUE,193,104,70,10
+    CONTROL         "",IDC_REFRESH_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,117,256,26
+    LTEXT           "&Win key poll:",IDC_POLL_LABEL,7,146,110,10
+    RTEXT           "%d ms",IDC_POLL_VALUE,193,146,70,10
+    CONTROL         "",IDC_POLL_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,159,256,26
     CONTROL         "<a>Reset to defaults</a>",IDC_RESET,"SysLink",WS_GROUP | WS_TABSTOP,7,191,91,10
     DEFPUSHBUTTON   "OK",IDOK,105,187,50,14,WS_GROUP
     PUSHBUTTON      "Cancel",IDCANCEL,159,187,50,14
