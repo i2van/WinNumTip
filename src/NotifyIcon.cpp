@@ -67,6 +67,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
     const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_TRAYMENU));
     if (!menu) return;
     const HMENU sub = GetSubMenu(menu, 0);
+    VERIFY(SetMenuDefaultItem(sub, IDM_PREFERENCES, FALSE));
     POINT pt;
     VERIFY(GetCursorPos(&pt));
 
