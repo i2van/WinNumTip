@@ -1,12 +1,12 @@
 // WinNumTip.rc2 - version-information resource (kept out of the main .rc so the
 // Visual Studio resource editor never rewrites it).
 //
-// The version numbers and copyright year are supplied by the build as RC preprocessor
+// The version numbers and current year are supplied by the build as RC preprocessor
 // defines (see the <ResourceCompile> block in WinNumTip.vcxproj), sourced from the
 // root Directory.Build.props ($(Version), $(DisplayVersion), $(CurrentYear)). The
-// #ifndef fallbacks below let the file still compile if built without the version
-// defines; APP_YEAR carries no fallback -- it is always injected by the build as the
-// current year ($(CurrentYear)).
+// copyright start year is authored here; the displayed years become "start-current"
+// once the current year differs. The #ifndef fallbacks let the file still compile
+// without build-supplied defines.
 
 // The version/style symbols (VS_VERSION_INFO, VS_FF_DEBUG, VFT_APP, ...) come from
 // winres.h, which the including WinNumTip.rc pulls in ahead of this file (this .rc2 is
@@ -22,8 +22,19 @@
 #define APP_PROD_STR  0.0.0.0          // ProductVersion string (full Version)
 #endif
 
+#define APP_COPYRIGHT_START_YEAR 2026
+#ifndef APP_YEAR
+#define APP_YEAR APP_COPYRIGHT_START_YEAR
+#endif
+
 #define APP_STRINGIZE2(x) #x
 #define APP_STRINGIZE(x)  APP_STRINGIZE2(x)
+
+#if APP_COPYRIGHT_START_YEAR == APP_YEAR
+#define APP_COPYRIGHT_YEARS APP_STRINGIZE(APP_YEAR)
+#else
+#define APP_COPYRIGHT_YEARS APP_STRINGIZE(APP_COPYRIGHT_START_YEAR) "-" APP_STRINGIZE(APP_YEAR)
+#endif
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION    APP_VER_COMMA
@@ -49,7 +60,7 @@ BEGIN
             VALUE "OriginalFilename", "WinNumTip.exe"
             VALUE "ProductName",      "WinNumTip"
             VALUE "ProductVersion",   APP_STRINGIZE(APP_PROD_STR)
-            VALUE "LegalCopyright",   "Copyright \xA9 " APP_STRINGIZE(APP_YEAR) " Ivan Ivon"
+            VALUE "LegalCopyright",   "Copyright \xA9 " APP_COPYRIGHT_YEARS " Ivan Ivon"
         END
     END
     BLOCK "VarFileInfo"

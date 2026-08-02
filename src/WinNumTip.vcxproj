@@ -74,9 +74,7 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>false</TreatWarningAsError>
-      <!-- The About dialog fills its "%s" version/year placeholders at runtime from
-           these (same numbers as the version resource; see res\WinNumTip.rc2). -->
-      <PreprocessorDefinitions>APP_VER_STR=$(DisplayVersion);APP_YEAR=$(CurrentYear);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>APP_VER_STR=$(DisplayVersion);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!-- No CRT: skip the stack-checking helper (__chkstk lives in the CRT). -->
       <AdditionalOptions>/Gs9999999 %(AdditionalOptions)</AdditionalOptions>
       <!-- Precompiled header. -->
@@ -88,7 +86,7 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <EntryPointSymbol>Entry</EntryPointSymbol>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib;comdlg32.lib;version.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib;comdlg32.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <!-- Embeds WinNumTip.manifest (Common-Controls v6 for visual styles +
@@ -175,6 +173,109 @@
     <None Include="res\WinNumTip.manifest" />
     <None Include="res\WinNumTip.rc2" />
   </ItemGroup>
+
+  <UsingTask TaskName="UpdateWinNumTipResource"
+             TaskFactory="CodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ResourcePath ParameterType="System.String" Required="true" />
+      <VersionResourcePath ParameterType="System.String" Required="true" />
+      <CurrentYear ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string versionText = File.ReadAllText(VersionResourcePath);
+        Regex startYearPattern = new Regex(
+            @"^[ \t]*#define[ \t]+APP_COPYRIGHT_START_YEAR[ \t]+(?<year>[0-9]{4})[ \t]*\r?$",
+            RegexOptions.Multiline);
+        Match startYearMatch = startYearPattern.Match(versionText);
+        if (!startYearMatch.Success || startYearMatch.NextMatch().Success)
+        {
+            Log.LogError(
+                "Expected exactly one APP_COPYRIGHT_START_YEAR definition in '{0}'.",
+                VersionResourcePath);
+            return false;
+        }
+
+        int startYear;
+        int currentYear;
+        if (!Int32.TryParse(startYearMatch.Groups["year"].Value, out startYear) ||
+            !Int32.TryParse(CurrentYear, out currentYear) ||
+            currentYear < startYear)
+        {
+            Log.LogError(
+                "Invalid copyright year range: start year '{0}', current year '{1}'.",
+                startYearMatch.Groups["year"].Value,
+                CurrentYear);
+            return false;
+        }
+
+        Regex versionPattern = new Regex(
+            @"^[ \t]*VALUE[ \t]+""LegalCopyright""[ \t]*,[ \t]*""(?<prefix>[^""\r\n]*)""[ \t]+APP_COPYRIGHT_YEARS[ \t]+""(?<suffix>[^""\r\n]*)""[ \t]*\r?$",
+            RegexOptions.Multiline);
+        Match versionMatch = versionPattern.Match(versionText);
+        if (!versionMatch.Success || versionMatch.NextMatch().Success)
+        {
+            Log.LogError(
+                "Expected one LegalCopyright VALUE using APP_COPYRIGHT_YEARS in '{0}'.",
+                VersionResourcePath);
+            return false;
+        }
+
+        string years =
+            startYear == currentYear
+                ? currentYear.ToString()
+                : startYear.ToString() + "-" + currentYear.ToString();
+        string copyright =
+            "\"" +
+            versionMatch.Groups["prefix"].Value +
+            years +
+            versionMatch.Groups["suffix"].Value +
+            "\"";
+
+        string resourceText = File.ReadAllText(ResourcePath);
+        Regex labelPattern = new Regex(
+            @"^(?<prefix>[ \t]*LTEXT[ \t]+)""[^""\r\n]*""(?<suffix>[ \t]*,IDC_ABOUT_COPYRIGHT[ \t]*,.*)$",
+            RegexOptions.Multiline);
+        Match labelMatch = labelPattern.Match(resourceText);
+        if (!labelMatch.Success || labelMatch.NextMatch().Success)
+        {
+            Log.LogError(
+                "Expected exactly one IDC_ABOUT_COPYRIGHT LTEXT in '{0}'.",
+                ResourcePath);
+            return false;
+        }
+
+        string label =
+            labelMatch.Groups["prefix"].Value +
+            copyright +
+            labelMatch.Groups["suffix"].Value;
+        string updatedText =
+            resourceText.Substring(0, labelMatch.Index) +
+            label +
+            resourceText.Substring(labelMatch.Index + labelMatch.Length);
+
+        if (!String.Equals(resourceText, updatedText, StringComparison.Ordinal))
+        {
+            File.WriteAllText(ResourcePath, updatedText, new UTF8Encoding(false));
+        }
+
+        return true;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Keep LegalCopyright authored only in the version resource. Before rc.exe runs, update IDD_ABOUT's label text directly in WinNumTip.rc. -->
+  <Target Name="UpdateResourceFile"
+          BeforeTargets="ResourceCompile">
+    <UpdateWinNumTipResource ResourcePath="$(ProjectDir)WinNumTip.rc"
+                             VersionResourcePath="$(ProjectDir)res\WinNumTip.rc2"
+                             CurrentYear="$(CurrentYear)" />
+  </Target>
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

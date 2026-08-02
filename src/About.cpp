@@ -3,8 +3,8 @@
 #include "DialogIcon.h"
 #include "resource.h"
 
-// APP_VER_STR / APP_YEAR are injected by the build (numbers from Directory.Build.props;
-// see WinNumTip.vcxproj). Stringize them to fill the About dialog's "%s" placeholders.
+// APP_VER_STR is injected by the build from Directory.Build.props (see WinNumTip.vcxproj).
+// Stringize it to fill the About dialog's "%s" placeholder.
 #define APP_STRINGIZE2(x) #x
 #define APP_STRINGIZE(x)  APP_STRINGIZE2(x)
 
@@ -28,48 +28,6 @@ void FormatDlgItemText(HWND dlg, int id, LPCTSTR value) {
     }
 }
 
-// Set the copyright label (IDC_ABOUT_COPYRIGHT) from the executable's version-information
-// "LegalCopyright" string (res\WinNumTip.rc2), so the About dialog and the file's Details
-// property page always show the one identical copyright (build year included) rather than a
-// second copy formatted into the .rc template. Read the version block straight from the
-// running module, resolve the language/code-page from its Translation table to form the
-// value's sub-block path, and apply LegalCopyright; on any failure the .rc's design-time text
-// is left in place.
-void SetCopyrightFromVersionInfo(HWND dlg, HINSTANCE inst) {
-    TCHAR path[MAX_PATH];
-    if (!GetModuleFileName(inst, path, ARRAYSIZE(path))) return;
-
-    DWORD ignored;
-    const DWORD size = GetFileVersionInfoSize(path, &ignored);
-    if (!size) return;
-
-    const HANDLE heap = GetProcessHeap();
-    void* const block = HeapAlloc(heap, 0, size);
-    if (!block) return;
-
-    if (GetFileVersionInfo(path, 0, size, block)) {
-        // Resolve the first language/code-page pair so the sub-block path matches the
-        // StringFileInfo block that holds the strings (here "000004B0"); %04X reproduces the
-        // upper-case block name authored in the version resource exactly.
-        struct LangAndCodePage { WORD language; WORD codePage; } *trans = nullptr;
-        UINT transLen = 0;
-        if (VerQueryValue(block, TEXT("\\VarFileInfo\\Translation"),
-                          reinterpret_cast<void**>(&trans), &transLen) &&
-            transLen >= sizeof(LangAndCodePage)) {
-            TCHAR sub[64];
-            wsprintf(sub, TEXT("\\StringFileInfo\\%04X%04X\\LegalCopyright"),
-                     trans->language, trans->codePage);
-
-            LPTSTR copyright = nullptr;
-            UINT copyrightLen = 0;
-            if (VerQueryValue(block, sub, reinterpret_cast<void**>(&copyright), &copyrightLen) && copyrightLen)
-                VERIFY(SetDlgItemText(dlg, IDC_ABOUT_COPYRIGHT, copyright));
-        }
-    }
-
-    VERIFY(HeapFree(heap, 0, block));
-}
-
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
     const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
@@ -91,10 +49,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
     SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_LINK)), TRUE);
 
-    // Fill the app-name "%s" placeholder (see IDD_ABOUT) with the build's version, and set the
-    // copyright label from the executable's LegalCopyright version string.
     FormatDlgItemText(dlg, IDC_ABOUT_NAME, TEXT(APP_STRINGIZE(APP_VER_STR)));
-    SetCopyrightFromVersionInfo(dlg, inst);
 
     return FALSE;
 }
