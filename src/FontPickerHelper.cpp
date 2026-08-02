@@ -115,46 +115,85 @@ LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 
 // Apply a selected face/style to the ChooseFont Sample control, sized to fit its box.
 void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
+    constexpr int kSampleFillPercent = 90;
+    constexpr int kPercentScale = 100;
+
     LOGFONT lf;
     MoveMemory(&lf, &selected, sizeof(lf));
     if (lf.lfFaceName[0] == 0) return;
 
     RECT rc;
-    GetClientRect(sample, &rc);
+    const BOOL gotClientRect = GetClientRect(sample, &rc);
+    VERIFY(gotClientRect);
+    if (!gotClientRect) return;
     const int boxWidth = rc.right - rc.left;
     const int boxHeight = rc.bottom - rc.top;
-    constexpr int kReferenceHeight = 100;
-    constexpr int kFillPercent = 90;
+    const int fitWidth = MulDiv(boxWidth, kSampleFillPercent, kPercentScale);
+    const int fitHeight = MulDiv(boxHeight, kSampleFillPercent, kPercentScale);
+    if (fitWidth <= 0 || fitHeight <= 0) return;
+
     lf.lfWidth = 0;
-    lf.lfHeight = -kReferenceHeight;
-    if (const HFONT measure = CreateFontIndirect(&lf)) {
-        const HDC dc = GetDC(sample);
-        const HFONT previous = static_cast<HFONT>(SelectObject(dc, measure));
+    const HDC dc = GetDC(sample);
+    VERIFY(dc != nullptr);
+    if (!dc) return;
+
+    int bestHeight = 0;
+    int low = 1;
+    int high = fitHeight;
+    while (low <= high) {
+        const int height = low + (high - low) / 2;
+        lf.lfHeight = -height;
+        const HFONT candidate = CreateFontIndirect(&lf);
+        VERIFY(candidate != nullptr);
+        if (!candidate) {
+            high = height - 1;
+            continue;
+        }
+
+        const HGDIOBJ previous = SelectObject(dc, candidate);
+        const bool selectSucceeded = previous && previous != HGDI_ERROR;
+        VERIFY(selectSucceeded);
+        if (!selectSucceeded) {
+            VERIFY(DeleteObject(candidate));
+            VERIFY(ReleaseDC(sample, dc) == 1);
+            return;
+        }
+
         SIZE extent = { 0, 0 };
-        GetTextExtentPoint32(dc, kFontSample, lstrlen(kFontSample), &extent);
-        SelectObject(dc, previous);
-        ReleaseDC(sample, dc);
-        DeleteObject(measure);
+        const BOOL measured = GetTextExtentPoint32(dc, kFontSample, lstrlen(kFontSample), &extent);
+        VERIFY(measured);
+        const HGDIOBJ restored = SelectObject(dc, previous);
+        const bool restoreSucceeded = restored && restored != HGDI_ERROR;
+        VERIFY(restoreSucceeded);
+        if (!restoreSucceeded) {
+            VERIFY(ReleaseDC(sample, dc) == 1);
+            VERIFY(DeleteObject(candidate));
+            return;
+        }
+        VERIFY(DeleteObject(candidate));
+        if (!measured) {
+            VERIFY(ReleaseDC(sample, dc) == 1);
+            return;
+        }
 
-        int height = kReferenceHeight;
-        if (extent.cx > 0 && boxWidth > 0) {
-            const int widthHeight =
-                MulDiv(kReferenceHeight, boxWidth * kFillPercent / 100, extent.cx);
-            if (widthHeight < height) height = widthHeight;
+        if (extent.cx <= fitWidth && extent.cy <= fitHeight) {
+            bestHeight = height;
+            low = height + 1;
+        } else {
+            high = height - 1;
         }
-        if (extent.cy > 0 && boxHeight > 0) {
-            const int boxHeightLimit =
-                MulDiv(kReferenceHeight, boxHeight * kFillPercent / 100, extent.cy);
-            if (boxHeightLimit < height) height = boxHeightLimit;
-        }
-        lf.lfHeight = -(height > 0 ? height : 1);
     }
+    VERIFY(ReleaseDC(sample, dc) == 1);
 
+    if (bestHeight == 0) return;
+    lf.lfHeight = -bestHeight;
     const HFONT font = CreateFontIndirect(&lf);
+    VERIFY(font != nullptr);
     if (!font) return;
-    if (g_sampleFont) DeleteObject(g_sampleFont);
+    const HFONT previousFont = g_sampleFont;
     g_sampleFont = font;
     SendMessage(sample, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+    if (previousFont) VERIFY(DeleteObject(previousFont));
     VERIFY(SetWindowText(sample, kFontSample));
 }
 
@@ -522,7 +561,7 @@ FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
 
     SetDialog(nullptr);
     g_parentDialog = nullptr;
-    if (g_sampleFont) { DeleteObject(g_sampleFont); g_sampleFont = nullptr; }
+    if (g_sampleFont) { VERIFY(DeleteObject(g_sampleFont)); g_sampleFont = nullptr; }
     VERIFY(DestroyWindow(helperOwner));
 
     if (!chosen)
