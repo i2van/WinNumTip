@@ -64,9 +64,6 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <!-- Optimize for size. -->
-      <Optimization>MinSpace</Optimization>
-      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
-      <IntrinsicFunctions>false</IntrinsicFunctions>
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <BufferSecurityCheck>false</BufferSecurityCheck>
@@ -110,6 +107,7 @@
       <Optimization>Disabled</Optimization>
       <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
       <PreprocessorDefinitions>_DEBUG;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
     </ClCompile>
     <ResourceCompile>
       <!-- Make the rc2's VS_FF_DEBUG file flag actually apply in Debug builds. -->
@@ -119,7 +117,10 @@
 
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
+      <Optimization>MinSpace</Optimization>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <OmitFramePointers>true</OmitFramePointers>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!-- Deterministic (reproducible) codegen: identical sources -> identical bits. -->
       <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
@@ -127,6 +128,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <!-- Deterministic link: reproducible PE timestamp + debug GUID (no wall clock). -->
       <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
     </Link>
