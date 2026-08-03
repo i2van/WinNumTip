@@ -170,9 +170,12 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     UpdateApplyState(dlg);
 
     // Focus the trackbar so the tip size can be adjusted with the arrow keys as soon as
-    // the dialog opens; returning FALSE tells the dialog manager to keep this focus rather
-    // than moving it to the default first tab-stop itself.
+    // the dialog opens. Dialogs opened from mouse input initially hide focus cues, so clear
+    // that UI state after initialization to paint the trackbar's focus rectangle. Returning
+    // FALSE tells the dialog manager to keep this focus rather than moving it to the default
+    // first tab-stop itself.
     SetFocus(tb);
+    VERIFY(PostMessage(dlg, WM_UPDATEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0));
     return FALSE;
 }
 
