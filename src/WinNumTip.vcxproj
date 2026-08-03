@@ -271,9 +271,12 @@
     </Task>
   </UsingTask>
 
-  <!-- Keep LegalCopyright authored only in the version resource. Before rc.exe runs, update IDD_ABOUT's label text directly in WinNumTip.rc. -->
-  <Target Name="UpdateResourceFile"
-          BeforeTargets="ResourceCompile">
+  <!-- Keep LegalCopyright authored only in the version resource. Visual Studio runs
+       InitGetClCommandLines during the C++ design-time build when the project loads, so
+       update IDD_ABOUT's label then instead of modifying WinNumTip.rc during each build. -->
+  <Target Name="UpdateResourceFileOnProjectLoad"
+          BeforeTargets="InitGetClCommandLines"
+          Condition="'$(DesignTimeBuild)' == 'true'">
     <UpdateWinNumTipResource ResourcePath="$(ProjectDir)WinNumTip.rc"
                              VersionResourcePath="$(ProjectDir)res\WinNumTip.rc2"
                              CurrentYear="$(CurrentYear)" />
