@@ -92,12 +92,14 @@ BEGIN
     ICON            IDI_APPICON,IDC_STATIC,7,7,20,20
     LTEXT           "WinNumTip %s",IDC_ABOUT_NAME,36,7,189,10
     CONTROL         "Shows the <a href=""https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec#taskbar"">Win+number (0..9) shortcut</a> for each app pinned to the taskbar.",IDC_ABOUT_DESC,
-                    "SysLink",WS_TABSTOP,36,20,189,18
-    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>   <a href=""https://github.com/i2van/WinNumTip/"">Project site</a>",IDC_ABOUT_LINK,
-                    "SysLink",WS_TABSTOP,36,43,189,10
+                    "SysLink",WS_GROUP | WS_TABSTOP,36,20,189,18
+    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>",IDC_ABOUT_README,
+                    "SysLink",WS_GROUP | WS_TABSTOP,36,43,30,10
+    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/"">Project site</a>",IDC_ABOUT_PROJECT_SITE,
+                    "SysLink",WS_TABSTOP,70,43,51,10
     LTEXT           "Copyright \xA9 2026 Ivan Ivon",IDC_ABOUT_COPYRIGHT,36,63,189,10
-    CONTROL         "<a>Preferences</a>",IDC_ABOUT_PREFS,"SysLink",WS_TABSTOP,36,79,60,10
-    DEFPUSHBUTTON   "OK",IDOK,175,76,50,14
+    CONTROL         "<a>Preferences</a>",IDC_ABOUT_PREFS,"SysLink",WS_GROUP | WS_TABSTOP,36,79,60,10
+    DEFPUSHBUTTON   "OK",IDOK,175,76,50,14,WS_GROUP
 END
 
 IDD_PREFERENCES DIALOGEX 0, 0, 270, 207

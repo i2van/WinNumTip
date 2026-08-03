@@ -12,7 +12,7 @@
 #define IDS_APP_NAME                    204
 #define IDC_ABOUT_NAME                  1001
 #define IDC_ABOUT_DESC                  1002
-#define IDC_ABOUT_LINK                  1003
+#define IDC_ABOUT_README                1003
 #define IDC_ABOUT_COPYRIGHT             1004
 #define IDC_ABOUT_PREFS                 1005
 #define IDC_SIZE_LABEL                  1006
@@ -31,6 +31,7 @@
 #define IDC_RESET                       1019
 #define IDC_FONT_RESET_LINK             1020
 #define IDC_APPLY                       1021
+#define IDC_ABOUT_PROJECT_SITE          1022
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -41,7 +42,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        102
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1022
+#define _APS_NEXT_CONTROL_VALUE         1023
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

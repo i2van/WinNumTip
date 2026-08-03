@@ -47,7 +47,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
             SendDlgItemMessage(dlg, IDC_ABOUT_NAME, WM_SETFONT, reinterpret_cast<WPARAM>(g_boldFont), TRUE);
     }
 
-    SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_LINK)), TRUE);
+    SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_README)), TRUE);
 
     FormatDlgItemText(dlg, IDC_ABOUT_NAME, TEXT(APP_STRINGIZE(APP_VER_STR)));
 
@@ -79,7 +79,9 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     // A SysLink (the description's "Win+number shortcut", or README/Project site) was
     // clicked (mouse) or activated (Enter): open its URL, embedded in the control's
     // <a href="..."> markup (see IDD_ABOUT).
-    if ((idCtrl == IDC_ABOUT_DESC || idCtrl == IDC_ABOUT_LINK) &&
+    if ((idCtrl == IDC_ABOUT_DESC ||
+         idCtrl == IDC_ABOUT_README ||
+         idCtrl == IDC_ABOUT_PROJECT_SITE) &&
         (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         const PNMLINK link = reinterpret_cast<PNMLINK>(hdr);
         OpenUrl(dlg, link->item.szUrl);
