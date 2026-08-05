@@ -54,18 +54,19 @@ inline void ArmRefreshTimer() {
 }
 
 // Destroy all child controls (number tips + separators) of the overlay window.
-void DestroyChildren(HWND wnd) {
-    HWND c;
-    while ((c = GetWindow(wnd, GW_CHILD)) != nullptr) DestroyWindow(c);
+void DestroyChildren(HWND hwnd) {
+    while (const HWND hwndChild = GetWindow(hwnd, GW_CHILD)) DestroyWindow(hwndChild);
 }
 
 // Release the per-show theme/font/brush. The window itself is left intact so it can
 // be reused by a refresh; the caller decides whether to destroy the window.
 void FreeResources() {
     if (g_theme) { CloseThemeData(g_theme); g_theme = nullptr; }
-    if (g_font)  { if (g_ownFont) DeleteObject(g_font); g_font = nullptr; g_ownFont = false; }
-    if (g_lineBrush) { DeleteObject(g_lineBrush); g_lineBrush = nullptr; }
-    if (g_bgBrush) { DeleteObject(g_bgBrush); g_bgBrush = nullptr; }
+    if (g_ownFont) WinAPI::GdiObject::Delete(g_font);
+    g_font = nullptr;
+    g_ownFont = false;
+    WinAPI::GdiObject::Delete(g_lineBrush);
+    WinAPI::GdiObject::Delete(g_bgBrush);
 }
 
 // Compute the tip-size bounds for a taskbar at 'tr' docked on 'edge' at 'dpi': the slim
@@ -295,7 +296,7 @@ bool TipSizeBounds(int& defThick, int& btnThick, bool& vertical) {
     RECT tr;
     UINT edge;
     if (!taskbar || !Taskbar::GetPos(tr, edge)) return false;
-    const UINT dpi = GetDpiForWindow(taskbar) ? GetDpiForWindow(taskbar) : USER_DEFAULT_SCREEN_DPI;
+    const UINT dpi = WinAPI::Window::GetDpi(taskbar);
     ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
     return true;
 }
@@ -342,7 +343,7 @@ void Refresh() {
     // percentage of that full button thickness (Preferences::TipSizePercent), clamped so
     // the strip is never thinner than the default -- the dialog only offers percentages at
     // or above the default's share, so every selectable value visibly changes the strip.
-    const UINT dpi = GetDpiForWindow(taskbar) ? GetDpiForWindow(taskbar) : USER_DEFAULT_SCREEN_DPI;
+    const UINT dpi = WinAPI::Window::GetDpi(taskbar);
     int defThick, btnThick;
     bool vertical;
     ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
@@ -383,7 +384,7 @@ void Refresh() {
     // Update in place: suspend the window's painting, drop the old child controls and
     // per-show resources, then rebuild everything and repaint once (double-buffered
     // via WS_EX_COMPOSITED) so the swap is flicker-free.
-    SendMessage(g_overlay, WM_SETREDRAW, FALSE, 0);
+    SetWindowRedraw(g_overlay, FALSE);
     DestroyChildren(g_overlay);
     FreeResources();
     SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
@@ -495,7 +496,7 @@ void Refresh() {
     // during an empty period) and topmost, then repaint the whole bar once. Batching
     // the child swap between WM_SETREDRAW FALSE/TRUE keeps the in-place refresh from
     // flickering.
-    SendMessage(g_overlay, WM_SETREDRAW, TRUE, 0);
+    SetWindowRedraw(g_overlay, TRUE);
     SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_NOREDRAW);
     RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);

@@ -29,9 +29,9 @@ HFONT g_previewFont = nullptr;
 // with a sensible height/charset), marking no user selection.
 void SeedFallbackFont(HWND dlg) {
     ZeroMemory(&g_workingFont, sizeof(g_workingFont));
-    HFONT dlgFont = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0));
+    HFONT dlgFont = GetWindowFont(dlg);
     if (!dlgFont) dlgFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    VERIFY(GetObject(dlgFont, sizeof(g_workingFont), &g_workingFont));
+    VERIFY(WinAPI::Font::GetLogFont(dlgFont, g_workingFont));
     g_workingFontSet = false;
     MoveMemory(&g_fallbackFont, &g_workingFont, sizeof(g_fallbackFont));
 }
@@ -49,18 +49,15 @@ void UpdateFontPreview(HWND dlg) {
     MoveMemory(&lf, &g_workingFont, sizeof(lf));
 
     // Render at the label's own line height rather than the chosen size.
-    if (const HFONT dlgFont = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0))) {
-        LOGFONT base;
-        ZeroMemory(&base, sizeof(base));
-        if (GetObject(dlgFont, sizeof(base), &base)) {
-            lf.lfHeight = base.lfHeight;
-            lf.lfWidth  = 0;
-        }
+    LOGFONT base;
+    if (WinAPI::Font::GetLogFont(GetWindowFont(dlg), base)) {
+        lf.lfHeight = base.lfHeight;
+        lf.lfWidth  = 0;
     }
 
     if (const HFONT nf = CreateFontIndirect(&lf)) {
-        SendMessage(name, WM_SETFONT, reinterpret_cast<WPARAM>(nf), TRUE);
-        if (g_previewFont) DeleteObject(g_previewFont);
+        SetWindowFont(name, nf, TRUE);
+        WinAPI::GdiObject::Delete(g_previewFont);
         g_previewFont = nf;
     }
 }
@@ -138,7 +135,7 @@ bool HasChanges() {
 }
 
 void Cleanup() {
-    if (g_previewFont) { DeleteObject(g_previewFont); g_previewFont = nullptr; }
+    WinAPI::GdiObject::Delete(g_previewFont);
 }
 
 } // namespace FontPicker

@@ -72,15 +72,12 @@ void SetDialog(HWND dialog) {
         g_exchange->status = static_cast<LONG>(result);
         g_exchange->dialog = nullptr;
         if (IsWindow(g_exchange->owner)) {
-            DWORD ownerProcess = 0;
-            GetWindowThreadProcessId(g_exchange->owner, &ownerProcess);
-            if (ownerProcess) AllowSetForegroundWindow(ownerProcess);
+            WinAPI::Window::AllowSetForeground(g_exchange->owner);
             (void)EnableWindow(g_exchange->owner, TRUE);
             SetForegroundWindow(g_exchange->owner);
         }
     }
-    TerminateProcess(GetCurrentProcess(), 0);
-    ExitProcess(0);
+    WinAPI::Process::Terminate();
 }
 
 LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
@@ -124,7 +121,7 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
 
     RECT rc;
     const BOOL gotClientRect = GetClientRect(sample, &rc);
-    VERIFY(gotClientRect);
+    ASSERT(gotClientRect);
     if (!gotClientRect) return;
     const int boxWidth = rc.right - rc.left;
     const int boxHeight = rc.bottom - rc.top;
@@ -134,7 +131,7 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
 
     lf.lfWidth = 0;
     const HDC dc = GetDC(sample);
-    VERIFY(dc != nullptr);
+    ASSERT(dc);
     if (!dc) return;
 
     int bestHeight = 0;
@@ -144,7 +141,7 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
         const int height = low + (high - low) / 2;
         lf.lfHeight = -height;
         const HFONT candidate = CreateFontIndirect(&lf);
-        VERIFY(candidate != nullptr);
+        ASSERT(candidate);
         if (!candidate) {
             high = height - 1;
             continue;
@@ -152,7 +149,7 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
 
         const HGDIOBJ previous = SelectObject(dc, candidate);
         const bool selectSucceeded = previous && previous != HGDI_ERROR;
-        VERIFY(selectSucceeded);
+        ASSERT(selectSucceeded);
         if (!selectSucceeded) {
             VERIFY(DeleteObject(candidate));
             VERIFY(ReleaseDC(sample, dc) == 1);
@@ -161,10 +158,10 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
 
         SIZE extent = { 0, 0 };
         const BOOL measured = GetTextExtentPoint32(dc, kFontSample, lstrlen(kFontSample), &extent);
-        VERIFY(measured);
+        ASSERT(measured);
         const HGDIOBJ restored = SelectObject(dc, previous);
         const bool restoreSucceeded = restored && restored != HGDI_ERROR;
-        VERIFY(restoreSucceeded);
+        ASSERT(restoreSucceeded);
         if (!restoreSucceeded) {
             VERIFY(ReleaseDC(sample, dc) == 1);
             VERIFY(DeleteObject(candidate));
@@ -188,12 +185,12 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
     if (bestHeight == 0) return;
     lf.lfHeight = -bestHeight;
     const HFONT font = CreateFontIndirect(&lf);
-    VERIFY(font != nullptr);
+    ASSERT(font);
     if (!font) return;
-    const HFONT previousFont = g_sampleFont;
+    HFONT previousFont = g_sampleFont;
     g_sampleFont = font;
-    SendMessage(sample, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
-    if (previousFont) VERIFY(DeleteObject(previousFont));
+    SetWindowFont(sample, font, TRUE);
+    WinAPI::GdiObject::Delete(previousFont);
     VERIFY(SetWindowText(sample, kFontSample));
 }
 
@@ -204,8 +201,7 @@ void RefreshChooseFontSample(HWND dialog) {
     if (!sample) return;
 
     LOGFONT lf;
-    ZeroMemory(&lf, sizeof(lf));
-    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0, reinterpret_cast<LPARAM>(&lf));
+    WinAPI::ChooseFont::GetLogFont(dialog, lf);
     ApplyChooseFontSample(sample, lf);
 }
 
@@ -232,7 +228,7 @@ BOOL CALLBACK FindVisibleApplyButton(HWND window, LPARAM param) {
     return FALSE;
 }
 
-HWND ChooseFontApplyButton(HWND dialog) {
+[[nodiscard]] HWND ChooseFontApplyButton(HWND dialog) {
     const HWND direct = GetDlgItem(dialog, psh3);
     if (IsWindowVisible(dialog) && direct) return direct;
 
@@ -249,8 +245,7 @@ void PreserveAppliedSelection(HWND apply) {
     if (!g_applySucceeded) return;
 
     g_applySucceeded = false;
-    if (GetFocus() == apply) SetFocus(GetDlgItem(GetParent(apply), IDOK));
-    EnableWindow(apply, FALSE);
+    WinAPI::Window::Enable(apply, false);
 }
 
 void OnApplyButtonNcDestroy(HWND apply) {
@@ -275,15 +270,12 @@ void SetChooseFontApplyEnabled(HWND dialog, bool enabled) {
     VERIFY(SetWindowSubclass(
         apply, ApplyButtonSubclassProc, kApplyButtonSubclassId, 0));
     ShowWindow(apply, SW_SHOW);
-    if (!enabled && GetFocus() == apply) SetFocus(GetDlgItem(GetParent(apply), IDOK));
-    EnableWindow(apply, enabled ? TRUE : FALSE);
+    WinAPI::Window::Enable(apply, enabled);
 }
 
 void UpdateChooseFontApplyState(HWND dialog) {
     LOGFONT selected;
-    ZeroMemory(&selected, sizeof(selected));
-    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0,
-                reinterpret_cast<LPARAM>(&selected));
+    WinAPI::ChooseFont::GetLogFont(dialog, selected);
 
     bool changed = g_resetToFallback != g_lastAppliedDefault;
     if (!changed && !g_resetToFallback)
@@ -293,12 +285,10 @@ void UpdateChooseFontApplyState(HWND dialog) {
 
 void ApplyChooseFontSelection(HWND dialog) {
     LOGFONT selected;
-    ZeroMemory(&selected, sizeof(selected));
-    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0,
-                reinterpret_cast<LPARAM>(&selected));
+    WinAPI::ChooseFont::GetLogFont(dialog, selected);
 
     if (!g_exchange) {
-        VERIFY(g_exchange != nullptr);
+        ASSERT(g_exchange);
         return;
     }
 
@@ -329,19 +319,15 @@ void ApplyChooseFontSelection(HWND dialog) {
     VERIFY(CheckDlgButton(dialog, chx1, BST_UNCHECKED));
     VERIFY(CheckDlgButton(dialog, chx2, BST_UNCHECKED));
 
-    const int face = static_cast<int>(
-        SendMessage(nameCombo, CB_FINDSTRINGEXACT, static_cast<WPARAM>(-1),
-                    reinterpret_cast<LPARAM>(g_fallbackFont.lfFaceName)));
+    const int face = ComboBox_FindStringExact(nameCombo, -1, g_fallbackFont.lfFaceName);
     if (face < 0) return false;
-    SendMessage(nameCombo, CB_SETCURSEL, face, 0);
+    ComboBox_SetCurSel(nameCombo, face);
     FORWARD_WM_COMMAND(dialog, cmb1, nameCombo, CBN_SELCHANGE, SendMessage);
 
     if (styleCombo) {
-        const int style = static_cast<int>(
-            SendMessage(styleCombo, CB_FINDSTRINGEXACT, static_cast<WPARAM>(-1),
-                        reinterpret_cast<LPARAM>(TEXT("Regular"))));
+        const int style = ComboBox_FindStringExact(styleCombo, -1, TEXT("Regular"));
         if (style >= 0) {
-            SendMessage(styleCombo, CB_SETCURSEL, style, 0);
+            ComboBox_SetCurSel(styleCombo, style);
             FORWARD_WM_COMMAND(dialog, cmb2, styleCombo, CBN_SELCHANGE, SendMessage);
         }
     }
@@ -359,8 +345,7 @@ void OnChooseFontCommand(HWND dialog, int id, HWND control, UINT notification) {
     }
 
     if (g_isHelperProcess && id == IDOK) {
-        SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0,
-                    reinterpret_cast<LPARAM>(&g_dialogResult));
+        WinAPI::ChooseFont::GetLogFont(dialog, g_dialogResult);
         g_pendingDialogResult = g_resetToFallback
             ? FontPickerHelper::Result::Default
             : FontPickerHelper::Result::Chosen;
@@ -521,10 +506,10 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     }
 }
 
-FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
-                                    const LOGFONT& initial, bool initialDefault,
-                                    const LOGFONT& fallback,
-                                    LOGFONT& selected) {
+[[nodiscard]] FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
+                                                 const LOGFONT& initial, bool initialDefault,
+                                                 const LOGFONT& fallback,
+                                                 LOGFONT& selected) {
     g_inst = inst;
     g_parentDialog = owner;
     g_resetToFallback = initialDefault;
@@ -561,7 +546,7 @@ FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
 
     SetDialog(nullptr);
     g_parentDialog = nullptr;
-    if (g_sampleFont) { VERIFY(DeleteObject(g_sampleFont)); g_sampleFont = nullptr; }
+    WinAPI::GdiObject::Delete(g_sampleFont);
     VERIFY(DestroyWindow(helperOwner));
 
     if (!chosen)
@@ -646,10 +631,7 @@ bool RunIfRequested(HINSTANCE inst) {
         Result result = Result::Failed;
         const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         if (SUCCEEDED(com)) {
-            INITCOMMONCONTROLSEX icc;
-            icc.dwSize = sizeof(icc);
-            icc.dwICC = ICC_LINK_CLASS;
-            if (InitCommonControlsEx(&icc)) {
+            if (WinAPI::CommonControls::Init(ICC_LINK_CLASS)) {
                 LOGFONT selected;
                 ZeroMemory(&selected, sizeof(selected));
                 result = ShowDialog(
@@ -776,9 +758,7 @@ bool ActivateDialog() {
     const HWND active = ActiveDialog();
     if (!active) return false;
 
-    DWORD process = 0;
-    GetWindowThreadProcessId(active, &process);
-    if (process) AllowSetForegroundWindow(process);
+    WinAPI::Window::AllowSetForeground(active);
 
     SetForegroundWindow(active);
     return PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0) != FALSE;

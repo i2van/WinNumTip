@@ -116,8 +116,7 @@ extern "C" void Entry() {
         // The system font dialog can leave font-cache worker threads inside system DLLs.
         // A normal ExitProcess may deadlock while running their detach callbacks, so the
         // disposable helper terminates after publishing its shared-memory result.
-        TerminateProcess(GetCurrentProcess(), 0);
-        ExitProcess(0);
+        WinAPI::Process::Terminate();
     }
 
     // Enforce a single running instance via a named mutex (UUID-based name).
@@ -158,14 +157,11 @@ extern "C" void Entry() {
     // Register the common controls we use -- the SysLink (in the About dialog and the
     // Preferences dialog's "Reset to defaults" link) and the trackbar (slider) in the
     // Preferences dialog -- once, so those modal dialogs can be created directly.
-    INITCOMMONCONTROLSEX icc;
-    icc.dwSize = sizeof(icc);
-    icc.dwICC = ICC_LINK_CLASS | ICC_BAR_CLASSES;
-    VERIFY(InitCommonControlsEx(&icc));
+    VERIFY(WinAPI::CommonControls::Init(ICC_LINK_CLASS | ICC_BAR_CLASSES));
 
     g_msgWnd = CreateWindowEx(WS_EX_TOOLWINDOW, kMsgClass, TEXT(""), WS_POPUP,
                               0, 0, 0, 0, nullptr, nullptr, g_inst, nullptr);
-    VERIFY(g_msgWnd != nullptr);
+    ASSERT(g_msgWnd);
     NotifyIcon::Add(g_inst, g_msgWnd);
     VERIFY(KeyboardHook::Install(g_inst));
     // Drive the overlay by polling the hook's atomic flag + live key state.

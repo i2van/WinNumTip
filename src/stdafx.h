@@ -48,6 +48,16 @@ extern "C" {
     NTSYSAPI void NTAPI RtlZeroMemory(void* dst, SIZE_T length);
 }
 
+// ASSERT(expr): in Debug, break into the debugger when 'expr' is false or zero. In Release it
+// expands to nothing at all, so neither the check nor the expression reaches the shipping
+// binary. Use it for a pure test on a value already in hand; use VERIFY when the tested
+// expression is itself the call that has to run.
+#ifdef _DEBUG
+    #define ASSERT(expr) ((expr) ? (void)0 : (OutputDebugStringA("ASSERT failed: " #expr "\n"), __debugbreak()))
+#else
+    #define ASSERT(expr) ((void)0)
+#endif
+
 // VERIFY(expr): evaluate 'expr' exactly once in every build (so the wrapped call
 // always runs), and in Debug additionally assert that it succeeded -- breaking
 // into the debugger when it is false/zero. In Release it is just the bare
@@ -111,3 +121,171 @@ inline LPCTSTR LoadStr(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
     LoadString(inst, id, buffer, N);
     return buffer;
 }
+
+// Wrappers that collapse a Win32 call sequence this app repeats verbatim into a single
+// operation: the SetFocus dance around disabling a dialog button, the handle-nulling cleanup
+// of an owned GDI object, the boilerplate around a *Ex struct, and so on.
+//
+// Each wrapper sits in a nested namespace named after what it acts on -- the process, a GDI
+// object, a window, a trackbar -- and is itself named after the operation, so a call site
+// reads as WinAPI::Process::Terminate() or WinAPI::TrackBar::SetPos(). Wrappers that stand
+// for a message rather than a function have no API name to borrow, and this way they need
+// none: WinAPI::Window::SetIcon is WM_SETICON, WinAPI::TrackBar::SetPos is TBM_SETPOS.
+//
+// The underlying Win32 call is always written ::qualified, so a wrapper body still shows at a
+// glance which raw API it stands for.
+namespace WinAPI {
+
+namespace Process {
+
+// Terminate(): leave the current process immediately, without running the loader's DLL detach
+// callbacks. The system font dialog can leave font-cache worker threads inside system DLLs,
+// and a normal ExitProcess may deadlock while running their detach routines -- so both the
+// disposable font-picker helper process and the entry point's helper branch end this way.
+// ExitProcess is unreachable and kept only as the compiler-visible [[noreturn]] tail in case
+// TerminateProcess ever returns.
+[[noreturn]] inline void Terminate() {
+    ::TerminateProcess(GetCurrentProcess(), 0);
+    ExitProcess(0);
+}
+
+} // namespace Process
+
+namespace CommonControls {
+
+// Init(classes): register the given ICC_* common-control classes (e.g. ICC_LINK_CLASS for
+// SysLink, ICC_BAR_CLASSES for the trackbar) so dialogs that use them can be created
+// directly. Returns FALSE when the registration fails.
+[[nodiscard]] inline BOOL Init(DWORD classes) {
+    INITCOMMONCONTROLSEX icc;
+    icc.dwSize = sizeof(icc);
+    icc.dwICC  = classes;
+    return ::InitCommonControlsEx(&icc);
+}
+
+} // namespace CommonControls
+
+namespace GdiObject {
+
+// Delete(obj): destroy the GDI object 'obj' refers to (font, brush, ...) and null the handle,
+// so a repeat call -- or a later cleanup pass -- is a no-op. Wrapped in VERIFY since a failing
+// DeleteObject means the handle was invalid or still selected into a DC, which is a
+// programming error rather than an expected runtime condition.
+template <typename T>
+inline void Delete(T& obj) {
+    if (obj) { VERIFY(::DeleteObject(obj)); obj = nullptr; }
+}
+
+} // namespace GdiObject
+
+namespace Icon {
+
+// Load(inst, id, cxMetric, cyMetric, flags): load icon resource 'id' from 'inst' at the icon
+// size named by the SM_CX*/SM_CY* system metrics (SM_CXICON/SM_CYICON for a large icon,
+// SM_CXSMICON/SM_CYSMICON for a small one), so it matches the shell's current scaling.
+// 'flags' picks the ownership: LR_SHARED for a system-managed icon that needs no cleanup,
+// LR_DEFAULTCOLOR for a caller-owned one that must be released with WinAPI::Icon::Destroy.
+[[nodiscard]] inline HICON Load(HINSTANCE inst, UINT id, int cxMetric, int cyMetric, UINT flags) {
+    return static_cast<HICON>(::LoadImage(inst, MAKEINTRESOURCE(id), IMAGE_ICON,
+                                          GetSystemMetrics(cxMetric), GetSystemMetrics(cyMetric),
+                                          flags));
+}
+
+// Destroy(icon): the icon counterpart of WinAPI::GdiObject::Delete -- release an icon the
+// caller owns (loaded without LR_SHARED) and null the handle so it cannot be freed twice.
+inline void Destroy(HICON& icon) {
+    if (icon) { VERIFY(::DestroyIcon(icon)); icon = nullptr; }
+}
+
+} // namespace Icon
+
+namespace Font {
+
+// GetLogFont(font, lf): describe the GDI font handle 'font' in 'lf'. False when 'font' is null
+// or the query fails, in which case 'lf' is left untouched and must not be read. Combined with
+// windowsx.h's GetWindowFont it also yields a window's own font, e.g. a dialog's already
+// DPI-scaled one used as the baseline that derived fonts keep the face and size of.
+[[nodiscard]] inline bool GetLogFont(HFONT font, LOGFONT& lf) {
+    return font != nullptr && ::GetObject(font, sizeof(lf), &lf) != 0;
+}
+
+} // namespace Font
+
+namespace Window {
+
+// GetDpi(wnd): the DPI 'wnd' is displayed at, falling back to the 96-dpi baseline when the
+// window handle is no longer valid (the API then returns 0), so the result can be passed
+// straight to the *ForDpi APIs.
+[[nodiscard]] inline UINT GetDpi(HWND wnd) {
+    const UINT dpi = ::GetDpiForWindow(wnd);
+    return dpi ? dpi : USER_DEFAULT_SCREEN_DPI;
+}
+
+// AllowSetForeground(wnd): let the process owning 'wnd' take the foreground. Only the current
+// foreground process can grant this, so it is called from whichever side is active while
+// activation is handed over to (or back from) the font-picker helper process. A no-op when
+// 'wnd' no longer belongs to a live process.
+inline void AllowSetForeground(HWND wnd) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(wnd, &process);
+    if (process) ::AllowSetForegroundWindow(process);
+}
+
+// Enable(button, enabled): enable or disable a dialog push button (e.g. Apply), first moving
+// the keyboard focus off it -- to the dialog's default OK button -- when it is about to be
+// disabled, so the dialog is never left with the focus on a dead control.
+inline void Enable(HWND button, bool enabled) {
+    if (!enabled && GetFocus() == button) SetFocus(GetDlgItem(GetParent(button), IDOK));
+    ::EnableWindow(button, enabled ? TRUE : FALSE);
+}
+
+// SetIcon(wnd, type, icon): give 'wnd' its ICON_BIG (Alt+Tab and the task switcher) or
+// ICON_SMALL (title bar and the taskbar) icon, and do nothing when the icon failed to load, so
+// the window keeps the class default rather than being stripped of one.
+inline void SetIcon(HWND wnd, UINT type, HICON icon) {
+    if (icon) SendMessage(wnd, WM_SETICON, type, reinterpret_cast<LPARAM>(icon));
+}
+
+} // namespace Window
+
+// The receiver of WM_CHOOSEFONT_GETLOGFONT. ChooseFont is an object-like macro, so this
+// namespace is really named ChooseFontW -- harmless, since every use of the name expands the
+// same way, but it is what a compiler diagnostic will call it.
+namespace ChooseFont {
+
+// GetLogFont(dialog, lf): read the ChooseFont common dialog's live selection into 'lf'. With
+// a custom template comdlg32 does not refresh its own preview, so the selection has to be
+// queried this way on every change. 'lf' is cleared first, so every field is defined even if
+// the dialog does not fill the whole structure.
+inline void GetLogFont(HWND dialog, LOGFONT& lf) {
+    ZeroMemory(&lf, sizeof(lf));
+    SendMessage(dialog, WM_CHOOSEFONT_GETLOGFONT, 0, reinterpret_cast<LPARAM>(&lf));
+}
+
+} // namespace ChooseFont
+
+namespace TrackBar {
+
+// Init(trackBar, minPos, maxPos, tickFreq, pageStep, pos): one-shot setup of a trackbar
+// (slider) -- its inclusive range, tick-mark spacing, PageUp/PageDown step and initial thumb
+// position. Every Preferences slider is configured exactly this way.
+inline void Init(HWND trackBar, int minPos, int maxPos, int tickFreq, int pageStep, int pos) {
+    SendMessage(trackBar, TBM_SETRANGE,    TRUE, MAKELPARAM(minPos, maxPos));
+    SendMessage(trackBar, TBM_SETTICFREQ,  tickFreq, 0);
+    SendMessage(trackBar, TBM_SETPAGESIZE, 0, pageStep);
+    SendMessage(trackBar, TBM_SETPOS,      TRUE, pos);
+}
+
+// GetPos(dlg, id) / SetPos(dlg, id, pos): read / move the thumb of the trackbar control 'id'
+// in 'dlg'.
+[[nodiscard]] inline int GetPos(HWND dlg, int id) {
+    return static_cast<int>(SendDlgItemMessage(dlg, id, TBM_GETPOS, 0, 0));
+}
+
+inline void SetPos(HWND dlg, int id, int pos) {
+    SendDlgItemMessage(dlg, id, TBM_SETPOS, TRUE, pos);
+}
+
+} // namespace TrackBar
+
+} // namespace WinAPI

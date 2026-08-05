@@ -32,10 +32,8 @@ void Add(HINSTANCE inst, HWND msgWnd) {
     // LoadImage (LR_DEFAULTCOLOR, not LR_SHARED) yields a caller-owned icon we must
     // DestroyIcon; free any previously-owned one first (Add re-runs on Explorer
     // restart). The LoadIcon fallback returns a shared icon that must not be destroyed.
-    if (g_ownedIcon) { DestroyIcon(g_ownedIcon); g_ownedIcon = nullptr; }
-    g_nid.hIcon = static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(IDI_APPICON), IMAGE_ICON,
-                                               GetSystemMetrics(SM_CXSMICON),
-                                               GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
+    WinAPI::Icon::Destroy(g_ownedIcon);
+    g_nid.hIcon = WinAPI::Icon::Load(inst, IDI_APPICON, SM_CXSMICON, SM_CYSMICON, LR_DEFAULTCOLOR);
     if (g_nid.hIcon) g_ownedIcon = g_nid.hIcon;
     else             g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
 
@@ -46,7 +44,7 @@ void Add(HINSTANCE inst, HWND msgWnd) {
 
 void Remove() {
     VERIFY(Shell_NotifyIcon(NIM_DELETE, &g_nid));
-    if (g_ownedIcon) { DestroyIcon(g_ownedIcon); g_ownedIcon = nullptr; }
+    WinAPI::Icon::Destroy(g_ownedIcon);
 }
 
 bool HandleTaskbarCreated(UINT msg) {

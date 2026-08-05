@@ -38,13 +38,12 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
     // Bold the app-name header: derive a bold copy of the dialog's own (already
     // DPI-scaled) font so the weight change keeps the same face and size.
-    const HFONT base = reinterpret_cast<HFONT>(SendMessage(dlg, WM_GETFONT, 0, 0));
     LOGFONT lf;
-    if (base && GetObject(base, sizeof(lf), &lf)) {
+    if (WinAPI::Font::GetLogFont(GetWindowFont(dlg), lf)) {
         lf.lfWeight = FW_BOLD;
         g_boldFont = CreateFontIndirect(&lf);
         if (g_boldFont)
-            SendDlgItemMessage(dlg, IDC_ABOUT_NAME, WM_SETFONT, reinterpret_cast<WPARAM>(g_boldFont), TRUE);
+            SetWindowFont(GetDlgItem(dlg, IDC_ABOUT_NAME), g_boldFont, TRUE);
     }
 
     SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_README)), TRUE);
@@ -55,7 +54,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 }
 
 void OnDestroy(HWND /*dlg*/) {
-    if (g_boldFont) { DeleteObject(g_boldFont); g_boldFont = nullptr; }
+    WinAPI::GdiObject::Delete(g_boldFont);
 }
 
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
