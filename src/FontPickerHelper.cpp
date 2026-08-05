@@ -423,6 +423,18 @@ void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
     }
 }
 
+// comdlg32 paints its own Sample text straight onto the dialog surface, over the Sample
+// control's rectangle, in the small dialog font. The control repaints in the fitted font
+// only when its own WM_PAINT is dispatched, which can be hundreds of milliseconds later
+// while comdlg32 is still enumerating fonts -- long enough to be seen as a wrong-font
+// flash. Repaint the control synchronously after every dialog paint so the fitted font is
+// restored within the same paint cycle.
+void OnChooseFontPaint(HWND dialog) {
+    FORWARD_WM_PAINT(dialog, DefSubclassProc);
+    if (const HWND sample = GetDlgItem(dialog, stc5))
+        VERIFY(RedrawWindow(sample, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW));
+}
+
 void OnActivateChooseFont(HWND dialog) {
     if (IsIconic(dialog)) ShowWindow(dialog, SW_RESTORE);
     SetActiveWindow(dialog);
@@ -447,6 +459,7 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         HANDLE_MSG(hwnd, WM_CLOSE, OnChooseFontClose);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnChooseFontNcDestroy);
         HANDLE_MSG(hwnd, WM_SHOWWINDOW, OnChooseFontShowWindow);
+        HANDLE_MSG(hwnd, WM_PAINT, OnChooseFontPaint);
         HANDLE_MSG(hwnd, WM_FONT_PICKER_ACTIVATE, OnActivateChooseFont);
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
