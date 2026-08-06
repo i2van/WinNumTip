@@ -264,6 +264,18 @@ inline void GetLogFont(HWND dialog, LOGFONT& lf) {
 
 } // namespace ChooseFont
 
+namespace Button {
+
+// Click(button): press 'button' as if the user had clicked it. BM_CLICK makes the control run
+// its own click processing and notify its parent with BN_CLICKED, so a programmatic press
+// takes exactly the same path -- and leaves exactly the same state behind -- as a real one,
+// rather than duplicating whatever the click handler does.
+inline void Click(HWND button) {
+    SendMessage(button, BM_CLICK, 0, 0);
+}
+
+} // namespace Button
+
 namespace TrackBar {
 
 // Init(trackBar, minPos, maxPos, tickFreq, pageStep, pos): one-shot setup of a trackbar

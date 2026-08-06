@@ -45,11 +45,9 @@ immediately.
   > `WinNumTip.ini` keys: `TipSizePercent`
 
 - **Tip font** - click **Select...** to pick the typeface and style (weight, italic, underline,
-  strikeout) the numbers are drawn with; the selected name is previewed in that font next to
-  the button. Only the face and style are used - the tip size stays governed by **Tip
-  size** - and the color follows **Invert colors**. When no font is chosen the taskbar's own
-  font is used (**Default**). When the selection changes, click **Apply** in the font selector
-  to save the current font without closing the selector.
+  strikeout) the numbers are drawn with. When no font is chosen the taskbar's own font is used
+  (**Default**). In the font selector, click **Apply** - or double-click an entry in the
+  **Font** or **Font style** list - to save the current selection without closing the selector.
 
   > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 

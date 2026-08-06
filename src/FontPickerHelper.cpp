@@ -371,6 +371,23 @@ void OnChooseFontCommand(HWND dialog, int id, HWND control, UINT notification) {
         g_resetToFallback = false;
         UpdateChooseFontApplyState(dialog);
     }
+
+    // Double-clicking a name in the Font list or a style in the Font style list is the
+    // shortcut for applying it -- the lists are CBS_SIMPLE, so their always-visible list box
+    // reports the second click as CBN_DBLCLK, by which point the first has already moved the
+    // selection and settled the Apply state. The press is routed through the Apply button so
+    // it follows the identical path as a real click, and so it stays a no-op while that
+    // button is disabled because the selection is already the applied one. Focus goes back
+    // where it was: a real click leaves it on the button, but a double-click in a list should
+    // leave the user free to keep browsing that list with the arrow keys.
+    if (notification == CBN_DBLCLK && (id == cmb1 || id == cmb2)) {
+        const HWND apply = ChooseFontApplyButton(dialog);
+        if (apply && IsWindowEnabled(apply)) {
+            const HWND focus = GetFocus();
+            WinAPI::Button::Click(apply);
+            if (focus) SetFocus(focus);
+        }
+    }
 }
 
 LRESULT OnChooseFontNotify(HWND dialog, int idFrom, NMHDR* notification) {
