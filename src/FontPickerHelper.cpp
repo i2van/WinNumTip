@@ -59,7 +59,7 @@ LOGFONT g_dialogResult = { 0 };
 LOGFONT* g_chooseFontResult = nullptr;
 
 constexpr LPCTSTR kFontTemplate = TEXT("FONTSELECTORDLG");
-constexpr LPCTSTR kFontSample = TEXT("0123456789");
+constexpr LPCTSTR kFontSample = TEXT("1234567890");
 constexpr UINT_PTR kSampleSubclassId = 1;
 constexpr UINT_PTR kDlgSubclassId = 2;
 constexpr UINT_PTR kApplyButtonSubclassId = 3;
@@ -89,8 +89,8 @@ LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 
 // One measured run of the sample text: the advance extent GDI lays it out in, and the ink
 // overhang its outer glyphs lean outside that box. An italic or script face paints past its
-// advance width -- the trailing '9' in the tip digits typically leans furthest -- so sizing
-// and centering by the advance alone either clips that overhang against the Sample box, or
+// advance width -- the leading or trailing digit can lean well past it -- so sizing and
+// centering by the advance alone either clips that overhang against the Sample box, or
 // (once it fits) leaves the ink looking off-centre because DrawText centers the advance box
 // rather than the pixels actually painted. Mirrors FontPreview.cpp's TextRun; kept separate
 // since this file measures a single fixed run rather than laying out two.

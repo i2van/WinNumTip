@@ -6,7 +6,7 @@ namespace {
 // The preview shows the face name in the dialog's own font followed by these digits in the
 // selected face: the name stays readable at a fixed size while the digits show the actual
 // glyphs the overlay will draw.
-constexpr LPCTSTR kDigits = TEXT("0123456789");
+constexpr LPCTSTR kDigits = TEXT("1234567890");
 
 // Minimum separation between the name and the right-aligned digits, in average character
 // widths of the run it follows.
