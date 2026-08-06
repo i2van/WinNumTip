@@ -1,10 +1,11 @@
 #pragma once
 
 // Font-selection helper for the Preferences dialog. It owns the "working" font -- the face
-// and style chosen in the dialog but not yet persisted -- and the preview shown in the
-// IDC_FONT_NAME control, and drives the ChooseFont common dialog (with the custom
-// FONTSELECTORDLG template). State is a single instance, matching the single Preferences
-// dialog; the parent forwards the relevant dialog messages to the calls below.
+// and style chosen in the dialog but not yet persisted -- and drives the ChooseFont common
+// dialog (with the custom FONTSELECTORDLG template), pushing every change to the
+// IDC_FONT_NAME preview that FontPreview renders. State is a single instance, matching the
+// single Preferences dialog; the parent forwards the relevant dialog messages to the calls
+// below.
 namespace FontPicker {
 
 // Seed the working font from the saved preference (or, when none is set, the dialog's own
@@ -31,7 +32,7 @@ void Save();
 // Whether the working font differs from the currently persisted font preference.
 [[nodiscard]] bool HasChanges();
 
-// Release the preview font this module owns. Call from WM_DESTROY.
+// Release the preview resources this module drives. Call from WM_DESTROY.
 void Cleanup();
 
 } // namespace FontPicker

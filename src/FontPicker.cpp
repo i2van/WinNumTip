@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "FontPicker.h"
 #include "FontPickerHelper.h"
+#include "FontPreview.h"
 #include "Preferences.h"
 #include "resource.h"
 
@@ -12,18 +13,14 @@ HINSTANCE g_inst = nullptr;
 
 // The font currently chosen in the dialog and whether the user has picked one at all.
 // Only face + style fields matter downstream (the overlay drives glyph height); the height
-// carried here is just the dialog font's, used to render the preview at a legible size.
+// carried here is just the dialog font's, used as a baseline when fitting the preview.
 // When g_workingFontSet is false the overlay falls back to the taskbar font, and the
-// preview shows "Default" in the dialog's own font.
+// preview names the face "Default".
 LOGFONT g_workingFont = { 0 };
 bool g_workingFontSet = false;
 
 // The default (fallback) font captured at Init -- the taskbar/dialog font shown as "Default".
 LOGFONT g_fallbackFont = { 0 };
-
-// The font that renders the IDC_FONT_NAME preview in the chosen face; owned here and
-// rebuilt on every change, freed by Cleanup.
-HFONT g_previewFont = nullptr;
 
 // Seed g_workingFont from the dialog's own font (the fallback baseline: a valid LOGFONT
 // with a sensible height/charset), marking no user selection.
@@ -36,30 +33,14 @@ void SeedFallbackFont(HWND dlg) {
     MoveMemory(&g_fallbackFont, &g_workingFont, sizeof(g_fallbackFont));
 }
 
-// Refresh the IDC_FONT_NAME preview: show the chosen face name (or "Default" when unset),
-// rendered in that face/style at the dialog font's height so any font stays legible.
+// Refresh the IDC_FONT_NAME preview: it names the chosen face (or "Default" when unset) and
+// shows the tip digits in that face.
 void UpdateFontPreview(HWND dlg) {
-    const HWND name = GetDlgItem(dlg, IDC_FONT_NAME);
     TCHAR def[16];
-    VERIFY(SetWindowText(name, g_workingFontSet ? g_workingFont.lfFaceName
-                                                : LoadStr(g_inst, IDS_DEFAULT, def)));
-
-    LOGFONT lf;
-    ZeroMemory(&lf, sizeof(lf));
-    MoveMemory(&lf, &g_workingFont, sizeof(lf));
-
-    // Render at the label's own line height rather than the chosen size.
-    LOGFONT base;
-    if (WinAPI::Font::GetLogFont(GetWindowFont(dlg), base)) {
-        lf.lfHeight = base.lfHeight;
-        lf.lfWidth  = 0;
-    }
-
-    if (const HFONT nf = CreateFontIndirect(&lf)) {
-        SetWindowFont(name, nf, TRUE);
-        WinAPI::GdiObject::Delete(g_previewFont);
-        g_previewFont = nf;
-    }
+    FontPreview::Update(GetDlgItem(dlg, IDC_FONT_NAME),
+                        g_workingFontSet ? g_workingFont.lfFaceName
+                                         : LoadStr(g_inst, IDS_DEFAULT, def),
+                        g_workingFont);
 }
 
 void SetWorkingSelection(HWND dlg, const LOGFONT* selected) {
@@ -78,6 +59,10 @@ namespace FontPicker {
 
 void Init(HWND dlg, HINSTANCE inst) {
     g_inst = inst;
+
+    // The preview mixes two fonts on one line, which a stock static cannot do, so take over
+    // its painting before the first refresh puts anything in it.
+    FontPreview::Init(GetDlgItem(dlg, IDC_FONT_NAME));
 
     // Seed the working font from the saved selection (over the dialog font as a baseline for
     // height/charset) or, when none is set, from the dialog font itself (the fallback), then
@@ -135,7 +120,7 @@ bool HasChanges() {
 }
 
 void Cleanup() {
-    WinAPI::GdiObject::Delete(g_previewFont);
+    FontPreview::Cleanup();
 }
 
 } // namespace FontPicker

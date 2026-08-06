@@ -148,6 +148,7 @@
     <ClInclude Include="PreferencesDialog.h" />
     <ClInclude Include="FontPicker.h" />
     <ClInclude Include="FontPickerHelper.h" />
+    <ClInclude Include="FontPreview.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -164,6 +165,7 @@
     <ClCompile Include="PreferencesDialog.cpp" />
     <ClCompile Include="FontPicker.cpp" />
     <ClCompile Include="FontPickerHelper.cpp" />
+    <ClCompile Include="FontPreview.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinNumTip.rc" />
