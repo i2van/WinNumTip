@@ -95,7 +95,10 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             bool isLeftButton = mouse == WM_LBUTTONUP;
             if (mouse == WM_RBUTTONUP || isLeftButton || mouse == WM_CONTEXTMENU) {
                 const HWND fontDialog = FontPickerHelper::ActiveDialog();
-                if (fontDialog) (void)FontPickerHelper::ActivateDialog();
+                // Foreground Preferences too (not just the font dialog): they're unrelated
+                // top-level windows (the helper process's dialog has no owner link to
+                // Preferences), so only PreferencesDialog::ActivateDialog brings both back.
+                if (fontDialog) (void)PreferencesDialog::ActivateDialog();
                 NotifyIcon::ShowMenu(g_inst, !isLeftButton, h, fontDialog);
             }
         });

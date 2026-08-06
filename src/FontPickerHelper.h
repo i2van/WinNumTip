@@ -16,6 +16,12 @@ enum class Result : LONG {
 // font dialog. wParam is Result::Chosen or Result::Default.
 constexpr UINT kApplySelectionMessage = WM_APP + 0x101;
 
+// Posted to the owner when the still-open font dialog is activated by some means other than
+// FontPickerHelper::ActivateDialog itself -- Alt+Tab, its own taskbar entry, a direct click --
+// so Preferences (an unrelated top-level window, running in a different process) is brought
+// forward too instead of being left behind other apps.
+constexpr UINT kActivateOwnerMessage = WM_APP + 0x102;
+
 // If this process was launched as the font-dialog helper, run it and report that normal
 // application startup must stop. Call before enforcing the main application's mutex.
 [[nodiscard]] bool RunIfRequested(HINSTANCE inst);

@@ -58,7 +58,15 @@ bool HandleTaskbarCreated(UINT msg) {
 void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
     if (!menuOwner || !IsWindow(menuOwner)) menuOwner = commandTarget;
 
-    SetForegroundWindow(menuOwner); // required so the menu dismisses correctly
+    // Only call when needed: menuOwner may already be the foreground window (e.g. the
+    // font-picker dialog, just foregrounded by the WM_NOTIFYICON handler's
+    // PreferencesDialog::ActivateDialog). That dialog treats any further SetForegroundWindow
+    // on it as a fresh, OS-driven activation (see FontPickerHelper's OnChooseFontActivate) and
+    // reacts by bouncing Preferences back to the foreground on top of it -- so a redundant
+    // call here would undo the z-order the caller just established. The invariant this needs
+    // -- menuOwner must *be* foreground before TrackPopupMenu, so the menu dismisses correctly
+    // -- already holds once it's already the foreground window.
+    if (GetForegroundWindow() != menuOwner) SetForegroundWindow(menuOwner);
 
     if(!show) return;
 

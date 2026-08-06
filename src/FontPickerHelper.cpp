@@ -16,7 +16,7 @@
 namespace {
 
 constexpr LPCTSTR kHelperSwitch = TEXT("--font-picker");
-constexpr DWORD kExchangeVersion = 2;
+constexpr DWORD kExchangeVersion = 3;
 
 enum class WaitResult {
     Completed,
@@ -34,6 +34,10 @@ struct Exchange {
     LOGFONT fallback;
     LONG initialDefault;
     volatile LONG status;
+    // Set (by either side) while it is itself driving the *other* window's activation, so the
+    // WM_ACTIVATE that results doesn't bounce back as a redundant kActivateOwnerMessage --
+    // see ActivateDialog, OnActivateChooseFont and OnChooseFontActivate.
+    volatile LONG suppressOwnerActivate;
 };
 
 Exchange* g_exchange = nullptr;
@@ -452,11 +456,44 @@ void OnChooseFontPaint(HWND dialog) {
         VERIFY(RedrawWindow(sample, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW));
 }
 
+// WM_FONT_PICKER_ACTIVATE (posted by FontPickerHelper::ActivateDialog in the main process,
+// right after suppressOwnerActivate is set and its own SetForegroundWindow call is issued):
+// restore/raise/activate the font dialog on its own UI thread, then clear
+// suppressOwnerActivate -- this is the single place that clears it (see ActivateDialog),
+// deliberately deferred to here rather than done immediately after that SetForegroundWindow
+// call returns. That earlier point is too soon: cross-process activation isn't necessarily
+// fully delivered/dispatched on this thread by the time it returns, so clearing it there could
+// let a WM_ACTIVATE that's really just this same activation reach OnChooseFontActivate
+// unsuppressed. This message is posted strictly after that SetForegroundWindow call, so by the
+// time it is processed, any WM_ACTIVATE it generated has necessarily already been dispatched.
 void OnActivateChooseFont(HWND dialog) {
     if (IsIconic(dialog)) ShowWindow(dialog, SW_RESTORE);
     SetActiveWindow(dialog);
     BringWindowToTop(dialog);
     SetForegroundWindow(dialog);
+    // Slot Preferences in immediately behind this dialog now, from this (helper) process's own
+    // thread, while it genuinely holds the foreground from the SetForegroundWindow call just
+    // above. SetWindowPos's z-order change only takes global effect -- rising above whatever
+    // window is truly foreground -- when made by a thread that already is the foreground one;
+    // called from the main process instead (before handing activation over), the same call
+    // silently fails to rise above other apps despite reporting success.
+    if (g_exchange && IsWindow(g_exchange->owner))
+        SetWindowPos(g_exchange->owner, dialog, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    if (g_exchange) g_exchange->suppressOwnerActivate = FALSE;
+}
+
+// WM_ACTIVATE: the font dialog is a top-level window with no owner link to Preferences (see
+// OnChooseFontInitDialog's comment), so the two only come forward together if told to. When
+// the OS itself activates this dialog -- Alt+Tab, its own taskbar entry, a direct click, all
+// of which bypass FontPickerHelper::ActivateDialog -- tell the owner (Preferences) to
+// foreground itself too, rather than leaving it behind other apps. Skipped while
+// suppressOwnerActivate is set, i.e. while this very activation is a side effect of
+// ActivateDialog/OnActivateChooseFont, to avoid an endless cross-process activation loop.
+void OnChooseFontActivate(HWND /*dialog*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
+    if (state == WA_INACTIVE || !g_exchange || g_exchange->suppressOwnerActivate) return;
+    if (!IsWindow(g_exchange->owner)) return;
+    WinAPI::Window::AllowSetForeground(g_exchange->owner);
+    PostMessage(g_exchange->owner, FontPickerHelper::kActivateOwnerMessage, 0, 0);
 }
 
 UINT_PTR OnChooseFontHookCommand(HWND dialog, int id, HWND /*control*/,
@@ -477,6 +514,7 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnChooseFontNcDestroy);
         HANDLE_MSG(hwnd, WM_SHOWWINDOW, OnChooseFontShowWindow);
         HANDLE_MSG(hwnd, WM_PAINT, OnChooseFontPaint);
+        HANDLE_MSG(hwnd, WM_ACTIVATE, OnChooseFontActivate);
         HANDLE_MSG(hwnd, WM_FONT_PICKER_ACTIVATE, OnActivateChooseFont);
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
@@ -784,14 +822,34 @@ bool ReadAppliedFont(LOGFONT& selected) {
     return selected.lfFaceName[0] != 0;
 }
 
+// Foreground the still-open font dialog (from the main process) and ask it to fully
+// reactivate itself on its own UI thread (OnActivateChooseFont, via the posted message
+// below). suppressOwnerActivate brackets the direct SetForegroundWindow call too: it is a
+// cross-process, same-thread-blocking call into the helper, so the WM_ACTIVATE it raises
+// there must not be echoed back as a kActivateOwnerMessage while we are the one driving it.
 bool ActivateDialog() {
     const HWND active = ActiveDialog();
     if (!active) return false;
 
+    // Skip if already foreground: this is called from several overlapping paths (Preferences'
+    // own WM_ACTIVATE handler, PreferencesDialog::ActivateDialog's explicit follow-up call,
+    // ...), and a tray-icon click/double-click can drive several of them within milliseconds
+    // of each other.
+    if (GetForegroundWindow() == active) return true;
+
     WinAPI::Window::AllowSetForeground(active);
 
+    // Set here, but deliberately NOT cleared here -- see OnActivateChooseFont, which clears
+    // it once the dialog has finished (re)activating on its own UI thread.
+    if (g_exchange) g_exchange->suppressOwnerActivate = TRUE;
     SetForegroundWindow(active);
-    return PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0) != FALSE;
+
+    const bool posted = PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0) != FALSE;
+    // If the follow-up message couldn't be queued, OnActivateChooseFont will never run to
+    // clear the flag we just set -- clear it here instead so a later genuine activation is
+    // never suppressed forever.
+    if (!posted && g_exchange) g_exchange->suppressOwnerActivate = FALSE;
+    return posted;
 }
 
 HWND ActiveDialog() {
