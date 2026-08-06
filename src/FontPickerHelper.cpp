@@ -87,6 +87,57 @@ void SetDialog(HWND dialog) {
 LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                         UINT_PTR id, DWORD_PTR ref);
 
+// One measured run of the sample text: the advance extent GDI lays it out in, and the ink
+// overhang its outer glyphs lean outside that box. An italic or script face paints past its
+// advance width -- the trailing '9' in the tip digits typically leans furthest -- so sizing
+// and centering by the advance alone either clips that overhang against the Sample box, or
+// (once it fits) leaves the ink looking off-centre because DrawText centers the advance box
+// rather than the pixels actually painted. Mirrors FontPreview.cpp's TextRun; kept separate
+// since this file measures a single fixed run rather than laying out two.
+struct SampleRun {
+    SIZE extent;
+    int leftBearing;
+    int rightBearing;
+
+    // The width the glyphs actually cover, overhangs included.
+    [[nodiscard]] int InkWidth() const { return leftBearing + extent.cx + rightBearing; }
+};
+
+// Ink overhangs of 'text' at the DC's current font, as positive pixel counts. Only the outer
+// glyphs can push ink outside the run: an interior overhang is absorbed by the neighbouring
+// character's advance. GetCharABCWidths reports the bearings as a negative A (ink left of the
+// origin) or C (ink past the advance), and serves TrueType faces only -- a bitmap face
+// synthesises its slant and already carries it in the advance GetTextExtentPoint32 returns, so
+// leaving both bearings at zero is the right answer there.
+void MeasureSampleBearings(HDC dc, LPCTSTR text, int length, SampleRun& run) {
+    run.leftBearing = run.rightBearing = 0;
+    if (length <= 0) return;
+
+    ABC abc;
+    if (GetCharABCWidths(dc, text[0], text[0], &abc) && abc.abcA < 0)
+        run.leftBearing = -abc.abcA;
+
+    const TCHAR last = text[length - 1];
+    if (GetCharABCWidths(dc, last, last, &abc) && abc.abcC < 0)
+        run.rightBearing = -abc.abcC;
+}
+
+// Measure 'text' with 'font' selected into 'dc': its advance extent and ink bearings together,
+// so a caller always has both figures from the same font selection.
+[[nodiscard]] bool MeasureSampleRun(HDC dc, HFONT font, LPCTSTR text, SampleRun& run) {
+    const HGDIOBJ previous = SelectObject(dc, font);
+    const bool selected = previous && previous != HGDI_ERROR;
+    ASSERT(selected);
+    if (!selected) return false;
+
+    const int length = lstrlen(text);
+    const bool measured = GetTextExtentPoint32(dc, text, length, &run.extent) != FALSE;
+    ASSERT(measured);
+    if (measured) MeasureSampleBearings(dc, text, length, run);
+    VERIFY(SelectObject(dc, previous));
+    return measured;
+}
+
 LRESULT OnFontSampleSetText(HWND hwnd, LPCTSTR /*text*/) {
     return DefSubclassProc(hwnd, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(kFontSample));
 }
@@ -96,12 +147,60 @@ void OnFontSampleNcDestroy(HWND hwnd) {
     FORWARD_WM_NCDESTROY(hwnd, DefSubclassProc);
 }
 
-// Keep comdlg32's Sample control text fixed to the tip digits.
+// Paint the Sample control ourselves rather than let comdlg32's stock static class do it: that
+// class centres (and clips) strictly by the text's advance width, with no notion of how far an
+// italic or script face's outer glyphs paint past it. Insetting the layout box by each side's
+// own overhang before centering -- the same technique FontPreview.cpp uses for its two
+// edge-aligned runs, here applied to one centred run -- places the ink itself in the middle of
+// the control whichever way it leans, instead of the advance box. DT_NOCLIP is essential once
+// that inset makes the layout box narrower than the control, so the overhang paints into the
+// margin instead of being clipped there; the paint DC is already clipped to the client area,
+// so nothing spills onto the border. WM_ERASEBKGND is suppressed (see the subclass proc) since
+// this fills the whole client area itself.
+void OnFontSamplePaint(HWND hwnd) {
+    PAINTSTRUCT ps;
+    const HDC dc = BeginPaint(hwnd, &ps);
+    ASSERT(dc);
+    if (!dc) return;
+
+    RECT rc;
+    VERIFY(GetClientRect(hwnd, &rc));
+
+    const HBRUSH brush = reinterpret_cast<HBRUSH>(
+        SendMessage(GetParent(hwnd), WM_CTLCOLORSTATIC,
+                    reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(hwnd)));
+    if (brush) VERIFY(FillRect(dc, &rc, brush));
+    SetBkMode(dc, TRANSPARENT);
+
+    const HFONT font = g_sampleFont ? g_sampleFont : GetWindowFont(hwnd);
+    SampleRun run = { { 0, 0 }, 0, 0 };
+    if (font && MeasureSampleRun(dc, font, kFontSample, run)) {
+        RECT box = rc;
+        box.left  += run.leftBearing;
+        box.right -= run.rightBearing;
+
+        const HGDIOBJ previous = SelectObject(dc, font);
+        const bool selected = previous && previous != HGDI_ERROR;
+        ASSERT(selected);
+        if (selected) {
+            VERIFY(DrawText(dc, kFontSample, -1, &box,
+                            DT_CENTER | DT_SINGLELINE | DT_NOPREFIX | DT_VCENTER | DT_NOCLIP));
+            VERIFY(SelectObject(dc, previous));
+        }
+    }
+
+    VERIFY(EndPaint(hwnd, &ps));
+}
+
+// Keep comdlg32's Sample control text fixed to the tip digits, and take over its painting so
+// an italic or script face's overhang is centred rather than clipped (see OnFontSamplePaint).
 LRESULT CALLBACK FontSampleSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                         UINT_PTR /*id*/, DWORD_PTR /*ref*/) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_FONT_SAMPLE_SETTEXT, OnFontSampleSetText);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnFontSampleNcDestroy);
+        HANDLE_MSG(hwnd, WM_PAINT, OnFontSamplePaint);
+        case WM_ERASEBKGND: return TRUE;
         case WM_SETFONT:
             // comdlg32 applies the small dialog font after the hook's WM_INITDIALOG.
             // Keep our fitted sample font until ApplyChooseFontSample replaces it.
@@ -160,9 +259,10 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
             return;
         }
 
-        SIZE extent = { 0, 0 };
-        const BOOL measured = GetTextExtentPoint32(dc, kFontSample, lstrlen(kFontSample), &extent);
+        SampleRun run = { { 0, 0 }, 0, 0 };
+        const BOOL measured = GetTextExtentPoint32(dc, kFontSample, lstrlen(kFontSample), &run.extent);
         ASSERT(measured);
+        if (measured) MeasureSampleBearings(dc, kFontSample, lstrlen(kFontSample), run);
         const HGDIOBJ restored = SelectObject(dc, previous);
         const bool restoreSucceeded = restored && restored != HGDI_ERROR;
         ASSERT(restoreSucceeded);
@@ -177,7 +277,10 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
             return;
         }
 
-        if (extent.cx <= fitWidth && extent.cy <= fitHeight) {
+        // Bound by the ink width, not the bare advance: an italic or script face's overhang
+        // (see OnFontSamplePaint) must fit the box too, or centering it there would still
+        // clip it against the control's border.
+        if (run.InkWidth() <= fitWidth && run.extent.cy <= fitHeight) {
             bestHeight = height;
             low = height + 1;
         } else {
