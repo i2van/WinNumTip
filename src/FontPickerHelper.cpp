@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "FontPickerHelper.h"
+#include "DialogIcon.h"
 #include "resource.h"
 
 // windowsx-style crackers for helper-only messages. The WM_SETTEXT alias preserves
@@ -592,7 +593,15 @@ void OnActivateChooseFont(HWND dialog) {
 // foreground itself too, rather than leaving it behind other apps. Skipped while
 // suppressOwnerActivate is set, i.e. while this very activation is a side effect of
 // ActivateDialog/OnActivateChooseFont, to avoid an endless cross-process activation loop.
-void OnChooseFontActivate(HWND /*dialog*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
+//
+// Must chain to DefSubclassProc first, unlike the early-return checks below: that is what
+// runs the dialog manager's own WM_ACTIVATE handling, which restores keyboard focus to
+// whichever control was last focused in this dialog. Skipping it (as this used to) left the
+// font dialog looking active -- foreground, on top -- with no control actually holding
+// keyboard focus, which is what made activation bouncing back from Preferences look like
+// focus had moved out of the font dialog entirely.
+void OnChooseFontActivate(HWND dialog, UINT state, HWND other, BOOL minimized) {
+    FORWARD_WM_ACTIVATE(dialog, state, other, minimized, DefSubclassProc);
     if (state == WA_INACTIVE || !g_exchange || g_exchange->suppressOwnerActivate) return;
     if (!IsWindow(g_exchange->owner)) return;
     WinAPI::Window::AllowSetForeground(g_exchange->owner);
@@ -625,6 +634,10 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
 BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam) {
     SetDialog(dialog);
+
+    // Its owner -- the hidden helper window -- has no class icon, so give the dialog itself
+    // the app icon (shared with About and Preferences) rather than showing the generic one.
+    DialogIcon::Set(dialog, g_inst);
 
     // The dialog is owned by a hidden helper window, so center it over Preferences.
     if (IsWindow(g_parentDialog)) {
