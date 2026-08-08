@@ -20,7 +20,7 @@ namespace {
 
 // The live modal Preferences dialog, or null when none is open (enforces a single
 // instance and lets a repeat request re-focus the existing one).
-HWND g_dlg = nullptr;
+HWND g_dlg;
 
 // The slider never drops below this percent, so its minimum position ("Default") stays a
 // distinct, selectable value even when the default strip's computed share rounds down to 0.

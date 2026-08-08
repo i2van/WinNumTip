@@ -34,9 +34,9 @@ constexpr LPCTSTR kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
 // interval" preference (Preferences::PollIntervalMs), re-armed when Preferences is applied.
 constexpr UINT_PTR kPollTimer = 1;
 
-HINSTANCE      g_inst   = nullptr;
-HWND           g_msgWnd = nullptr;
-IUIAutomation* g_uia    = nullptr;
+HINSTANCE      g_inst;
+HWND           g_msgWnd;
+IUIAutomation* g_uia;
 
 // Arm (or re-arm) the persistent poll timer on the message window with the current "poll
 // interval" preference. Re-arming replaces the running timer's period, so this is used both

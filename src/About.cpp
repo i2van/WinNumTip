@@ -12,9 +12,9 @@ namespace {
 
 // The live modal About dialog, or null when none is open. Enforces "only one About
 // dialog" and lets a repeat request re-focus the existing one instead of opening another.
-HWND g_dlg = nullptr;
+HWND g_dlg;
 // Bold font applied to the app-name header; owned here and freed on WM_DESTROY.
-HFONT g_boldFont = nullptr;
+HFONT g_boldFont;
 
 // Fill the single "%s" in control 'id''s .rc template text with 'value' (e.g. turn the
 // About dialog's "WinNumTip %s" into "WinNumTip 1.1"). The display text stays in the

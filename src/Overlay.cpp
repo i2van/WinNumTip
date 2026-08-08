@@ -17,23 +17,23 @@ constexpr int kSepId = 1;
 // Module state. The overlay window lives for the whole "Win held" session so its
 // refresh timer keeps polling even when the bar is momentarily empty; only the child
 // controls and per-show theme/font/brush are swapped as the taskbar changes.
-HWND     g_overlay   = nullptr;
-HFONT    g_font      = nullptr;
-bool     g_ownFont   = false;                  // true when g_font must be DeleteObject'd (not a stock font)
-HTHEME   g_theme     = nullptr;
-HBRUSH   g_lineBrush = nullptr;                 // solid brush that paints the separator lines
-HBRUSH   g_bgBrush   = nullptr;                 // solid strip-fill brush, only in invert-colors mode
-bool     g_invert    = false;                   // true when the strip/number colors are swapped
-int      g_bgPart    = TBP_BACKGROUNDBOTTOM;   // taskbar background part for the docked edge
-COLORREF g_textColor = 0;                      // resolved from the theme / system colors in Show
-bool     g_active    = false;                  // true between Show (Win down) and Hide (Win up)
+HWND     g_overlay;
+HFONT    g_font;
+bool     g_ownFont;    // true when g_font must be DeleteObject'd (not a stock font)
+HTHEME   g_theme;
+HBRUSH   g_lineBrush;  // solid brush that paints the separator lines
+HBRUSH   g_bgBrush;    // solid strip-fill brush, only in invert-colors mode
+bool     g_invert;     // true when the strip/number colors are swapped
+int      g_bgPart = TBP_BACKGROUNDBOTTOM;  // taskbar background part for the docked edge
+COLORREF g_textColor;  // resolved from the theme / system colors in Show
+bool     g_active;     // true between Show (Win down) and Hide (Win up)
 
 // Retained so the refresh timer can rebuild the bar in place when the taskbar's
 // buttons change while it is shown (e.g. an app minimizes/closes to the notification
 // area, which removes its button and would otherwise leave an orphaned number behind).
-IUIAutomation* g_uia   = nullptr;
-HINSTANCE      g_inst  = nullptr;
-int            g_snapN = 0;                     // button count captured when the bar was built
+IUIAutomation* g_uia;
+HINSTANCE      g_inst;
+int            g_snapN;  // button count captured when the bar was built
 RECT           g_snap[kMaxTips];              // button rects captured when the bar was built
 // Timer id for the persistent refresh timer; its interval is the user's "refresh interval"
 // preference (Preferences::RefreshIntervalMs), re-applied on each Show or Apply.

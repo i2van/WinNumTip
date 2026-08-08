@@ -9,18 +9,18 @@ namespace {
 
 // The application instance that owns the FONTSELECTORDLG template resource (captured in
 // Init); passed to the helper process so it can load the custom template.
-HINSTANCE g_inst = nullptr;
+HINSTANCE g_inst;
 
 // The font currently chosen in the dialog and whether the user has picked one at all.
 // Only face + style fields matter downstream (the overlay drives glyph height); the height
 // carried here is just the dialog font's, used as a baseline when fitting the preview.
 // When g_workingFontSet is false the overlay falls back to the taskbar font, and the
 // preview names the face "Default".
-LOGFONT g_workingFont = { 0 };
-bool g_workingFontSet = false;
+LOGFONT g_workingFont;
+bool g_workingFontSet;
 
 // The default (fallback) font captured at Init -- the taskbar/dialog font shown as "Default".
-LOGFONT g_fallbackFont = { 0 };
+LOGFONT g_fallbackFont;
 
 // Seed g_workingFont from the dialog's own font (the fallback baseline: a valid LOGFONT
 // with a sensible height/charset), marking no user selection.

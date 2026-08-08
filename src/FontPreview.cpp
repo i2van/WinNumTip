@@ -22,7 +22,7 @@ constexpr UINT_PTR kSubclassId = 1;
 // The font that renders the digits run in the chosen face, sized to fit whatever width the
 // face name leaves free; owned here, rebuilt by every Update, freed by Cleanup. Null when the
 // name alone fills the control, in which case the preview shows the name on its own.
-HFONT g_digitsFont = nullptr;
+HFONT g_digitsFont;
 
 // The box the two runs lay out in: the control's client area less an inset on each side, so
 // the text keeps clear of the border instead of butting up against it. The inset is the fixed

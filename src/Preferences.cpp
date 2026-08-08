@@ -18,19 +18,19 @@ constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
-TCHAR g_iniPath[MAX_PATH] = { 0 };
+TCHAR g_iniPath[MAX_PATH];
 
 // Cached tip-size percentage in [0, 100]; mirrors the INI value.
-int g_tipPercent = 0;
+int g_tipPercent;
 
 // Cached invert-colors flag; mirrors the INI value.
-bool g_invert = false;
+bool g_invert;
 
 // Cached selected font (only lfFaceName + the weight/italic/underline/strikeout style
 // fields are meaningful; height/charset are the overlay's/dialog's concern). Valid only
 // when g_fontSet is true; otherwise the overlay falls back to the taskbar font.
-LOGFONT g_font = { 0 };
-bool g_fontSet = false;
+LOGFONT g_font;
+bool g_fontSet;
 
 // Cached refresh-timer interval in ms; mirrors the INI value.
 int g_refreshMs = Preferences::kDefaultRefreshMs;

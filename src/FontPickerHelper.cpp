@@ -41,23 +41,23 @@ struct Exchange {
     volatile LONG suppressOwnerActivate;
 };
 
-Exchange* g_exchange = nullptr;
-HWND g_dialog = nullptr;
-LONG g_exchangeSerial = 0;
-bool g_isHelperProcess = false;
+Exchange* g_exchange;
+HWND g_dialog;
+LONG g_exchangeSerial;
+bool g_isHelperProcess;
 
 // Helper-side state for the live ChooseFont dialog.
-HINSTANCE g_inst = nullptr;
-HWND g_parentDialog = nullptr;
-LOGFONT g_fallbackFont = { 0 };
-bool g_resetToFallback = false;
-LOGFONT g_lastAppliedFont = { 0 };
-bool g_lastAppliedDefault = false;
-bool g_applySucceeded = false;
-HFONT g_sampleFont = nullptr;
+HINSTANCE g_inst;
+HWND g_parentDialog;
+LOGFONT g_fallbackFont;
+bool g_resetToFallback;
+LOGFONT g_lastAppliedFont;
+bool g_lastAppliedDefault;
+bool g_applySucceeded;
+HFONT g_sampleFont;
+LOGFONT g_dialogResult;
+LOGFONT* g_chooseFontResult;
 FontPickerHelper::Result g_pendingDialogResult = FontPickerHelper::Result::Pending;
-LOGFONT g_dialogResult = { 0 };
-LOGFONT* g_chooseFontResult = nullptr;
 
 constexpr LPCTSTR kFontTemplate = TEXT("FONTSELECTORDLG");
 constexpr LPCTSTR kFontSample = TEXT("1234567890");

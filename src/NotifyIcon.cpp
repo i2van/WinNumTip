@@ -8,10 +8,10 @@ namespace {
 constexpr UINT kNotifyIconId = 1;
 
 NOTIFYICONDATA g_nid;
-HINSTANCE      g_inst = nullptr;
-HWND           g_msgWnd = nullptr;
-UINT           g_taskbarCreated = 0;   // "TaskbarCreated" broadcast (Explorer restart)
-HICON          g_ownedIcon = nullptr;  // icon we must DestroyIcon (from LoadImage); null if shared
+HINSTANCE      g_inst;
+HWND           g_msgWnd;
+UINT           g_taskbarCreated;   // "TaskbarCreated" broadcast (Explorer restart)
+HICON          g_ownedIcon;  // icon we must DestroyIcon (from LoadImage); null if shared
 
 } // namespace
 

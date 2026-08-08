@@ -4,7 +4,7 @@
 
 namespace {
 
-HHOOK g_hook = nullptr;
+HHOOK g_hook;
 
 // Platform-width visibility flag shared between the hook callback and the poll.
 // LONG_PTR is the architecture's natural register width (32-bit on Win32, 64-bit on
@@ -30,7 +30,7 @@ volatile  LONG_PTR g_desired = kHide;
 // by the hook -- either it was never delivered (e.g. Win+L switches to the secure
 // desktop) or the release arrived injected (remapper/VM) and so was ignored by the
 // hook. See ShouldShow.
-int            g_upTicks       = 0;
+int            g_upTicks;
 constexpr int  kUpTicksToHide  = 10;   // ~0.75s at the message window's 75ms poll
 
 // Low-level keyboard hook. It only flips g_desired for Win key-down/up and returns,
