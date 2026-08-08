@@ -55,15 +55,12 @@
     <OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)build\obj\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
-  <!-- Non-incremental link in Release so the deterministic /Brepro output is stable. -->
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
 
-  <!-- Common settings: no CRT, size-optimized, custom entry point. -->
   <ItemDefinitionGroup>
     <ClCompile>
-      <!-- Optimize for size. -->
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <BufferSecurityCheck>false</BufferSecurityCheck>
@@ -72,9 +69,7 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>false</TreatWarningAsError>
       <PreprocessorDefinitions>APP_VER_STR=$(DisplayVersion);%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <!-- No CRT: skip the stack-checking helper (__chkstk lives in the CRT). -->
       <AdditionalOptions>/Gs9999999 %(AdditionalOptions)</AdditionalOptions>
-      <!-- Precompiled header. -->
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
     </ClCompile>
@@ -86,31 +81,22 @@
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib;comdlg32.lib</AdditionalDependencies>
     </Link>
     <Manifest>
-      <!-- Embeds WinNumTip.manifest (Common-Controls v6 for visual styles +
-           Per-Monitor-V2 DPI) via the toolchain's manifest tool. -->
       <AdditionalManifestFiles>res\WinNumTip.manifest</AdditionalManifestFiles>
     </Manifest>
     <ResourceCompile>
-      <Culture>0x0000</Culture>   <!-- Language-neutral (invariant) resources -->
-      <!-- Version info (res\WinNumTip.rc2) is stamped from Directory.Build.props:
-           $(Version) drives the numeric + product strings, $(DisplayVersion) the
-           file-version string, $(CurrentYear) the copyright year. -->
+      <Culture>0x0000</Culture>
       <PreprocessorDefinitions>APP_VER_COMMA=$(Version.Replace('.',','));APP_VER_STR=$(DisplayVersion);APP_PROD_STR=$(Version);APP_YEAR=$(CurrentYear);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
 
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
-      <!-- Debug: no optimization (overrides the size-optimized common settings) for
-           accurate stepping/inspection. No-CRT flags stay inherited from the common
-           group (/Gs9999999, BufferSecurityCheck off). -->
       <Optimization>Disabled</Optimization>
       <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
       <PreprocessorDefinitions>_DEBUG;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <IntrinsicFunctions>false</IntrinsicFunctions>
     </ClCompile>
     <ResourceCompile>
-      <!-- Make the rc2's VS_FF_DEBUG file flag actually apply in Debug builds. -->
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
@@ -122,14 +108,14 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <OmitFramePointers>true</OmitFramePointers>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <!-- Deterministic (reproducible) codegen: identical sources -> identical bits. -->
+      <DebugInformationFormat>None</DebugInformationFormat>
       <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <!-- Deterministic link: reproducible PE timestamp + debug GUID (no wall clock). -->
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
@@ -273,9 +259,6 @@
     </Task>
   </UsingTask>
 
-  <!-- Keep LegalCopyright authored only in the version resource. Visual Studio runs
-       InitGetClCommandLines during the C++ design-time build when the project loads, so
-       update IDD_ABOUT's label then instead of modifying WinNumTip.rc during each build. -->
   <Target Name="UpdateResourceFileOnProjectLoad"
           BeforeTargets="InitGetClCommandLines"
           Condition="'$(DesignTimeBuild)' == 'true'">
