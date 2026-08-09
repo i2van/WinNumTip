@@ -155,9 +155,18 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
 [[nodiscard]] HWND CreateOverlayWindow(HINSTANCE inst) {
     return CreateWindowEx(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED,
         kOverlayClass, TEXT(""), WS_POPUP | WS_CLIPCHILDREN,
         0, 0, 10, 10, nullptr, nullptr, inst, nullptr);
+}
+
+// Apply the "opacity" preference to the overlay window as a whole-window alpha blend
+// (WS_EX_LAYERED + LWA_ALPHA covers the window and its child tip/separator statics
+// together, so no per-child changes are needed). No-op while the window doesn't exist.
+void ApplyOpacityPreference() {
+    if (!g_overlay) return;
+    const BYTE alpha = static_cast<BYTE>(MulDiv(255, Preferences::OpacityPercent(), 100));
+    VERIFY(SetLayeredWindowAttributes(g_overlay, 0, alpha, LWA_ALPHA));
 }
 
 // Create a themed STATIC child (a number tip or a separator line) relative to the
@@ -276,6 +285,7 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     }
     // Re-arm each session (the window and its timer persist across sessions) so a changed
     // refresh-interval preference takes effect on the next Win-press.
+    ApplyOpacityPreference();
     ArmRefreshTimer();
     g_active = true;
     Refresh();
@@ -283,6 +293,7 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
 
 void ApplyPreferences() {
     if (!g_active || !g_overlay) return;
+    ApplyOpacityPreference();
     ArmRefreshTimer();
     Refresh();
 }

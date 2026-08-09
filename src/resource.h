@@ -32,6 +32,9 @@
 #define IDC_FONT_RESET_LINK             1020
 #define IDC_APPLY                       1021
 #define IDC_ABOUT_PROJECT_SITE          1022
+#define IDC_OPACITY_LABEL               1023
+#define IDC_OPACITY_VALUE               1024
+#define IDC_OPACITY_SLIDER              1025
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -42,7 +45,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        102
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1023
+#define _APS_NEXT_CONTROL_VALUE         1026
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

@@ -4,8 +4,9 @@
 // saved with the Get*/WritePrivateProfile* WinAPI). This is the model only; the editing
 // UI lives in PreferencesDialog.
 //
-// Five preferences today:
+// Six preferences today:
 //  - the overlay "tip size" (see below),
+//  - "opacity": how opaque the overlay window is, as a percentage (see below),
 //  - "invert colors": whether the strip and number colors are swapped for a highlighted
 //    look,
 //  - "font": the face + style (weight/italic/underline/strikeout) the numbers are drawn
@@ -32,6 +33,13 @@ namespace Preferences {
 constexpr int kMinPercent = 0;
 constexpr int kMaxPercent = 100;
 
+// The overlay opacity percentage: how opaque the overlay window is, applied as its
+// layered-window alpha (100 = fully opaque, unchanged from the pre-opacity behavior).
+// Kept away from 0 so the overlay can never be made fully invisible while still active.
+constexpr int kMinOpacityPercent     = 10;
+constexpr int kMaxOpacityPercent     = 100;
+constexpr int kDefaultOpacityPercent = 100;
+
 // The overlay refresh-timer interval, in milliseconds: how often the shown overlay
 // re-checks the taskbar buttons and rebuilds the bar in place. Lower is more responsive to
 // taskbar changes but polls more often.
@@ -56,6 +64,14 @@ void Load();
 // Store the tip-size percentage (clamped to [0, 100]) both in memory and in the INI
 // file next to the executable (WritePrivateProfileString).
 void SetTipSizePercent(int percent);
+
+// Current overlay opacity percentage in [kMinOpacityPercent, kMaxOpacityPercent] (see the
+// file header for its meaning). 100 (fully opaque) matches the overlay's pre-opacity look.
+[[nodiscard]] int OpacityPercent();
+
+// Store the opacity percentage (clamped to [kMinOpacityPercent, kMaxOpacityPercent]) both
+// in memory and in the INI file next to the executable.
+void SetOpacityPercent(int percent);
 
 // Whether the overlay draws with inverted colors: the strip is filled with the number
 // color and the numbers are drawn in the bar color (a highlighted look).

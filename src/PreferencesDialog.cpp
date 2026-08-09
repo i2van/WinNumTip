@@ -38,17 +38,22 @@ constexpr int kRefreshPageStep = 50;
 constexpr int kPollTickFreq    = 25;
 constexpr int kPollPageStep    = 25;
 
+// Opacity trackbar tuning: a tick mark and a PageUp/PageDown step every N percent.
+constexpr int kOpacityTickFreq = 10;
+constexpr int kOpacityPageStep = 10;
+
 // The trackbar's minimum percentage: the default strip's share of a full taskbar button.
 // Percentages below this render identically to the default, so they are excluded from the
 // slider; the minimum position is shown as "Default" rather than a number.
 int g_minPct = kMinSliderPct;
 
 // Value-readout templates captured from the dialog's own statics in OnInitDialog (before the
-// first update overwrites them) so all display text lives in WinNumTip.rc: the size readout's
-// "%d%%" and each interval readout's "%d ms". g_defaultText holds IDS_DEFAULT ("Default"),
-// shown for the size readout at the slider minimum.
+// first update overwrites them) so all display text lives in WinNumTip.rc: the size and
+// opacity readouts' "%d%%" and each interval readout's "%d ms". g_defaultText holds
+// IDS_DEFAULT ("Default"), shown for the size readout at the slider minimum.
 TCHAR g_defaultText[16];
 TCHAR g_sizeFormat[16];
+TCHAR g_opacityFormat[16];
 TCHAR g_refreshFormat[16];
 TCHAR g_pollFormat[16];
 
@@ -62,9 +67,9 @@ void UpdateValueText(HWND dlg) {
     VERIFY(SetDlgItemText(dlg, IDC_SIZE_VALUE, buf));
 }
 
-// Refresh a timer-interval readout from its trackbar using the control's captured "%d ms"
-// template.
-void UpdateMsText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
+// Refresh a single-value readout (opacity percentage or timer interval) from its trackbar
+// using the control's captured "%d%%"/"%d ms" template.
+void UpdateReadoutText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     const int pos = WinAPI::TrackBar::GetPos(dlg, sliderId);
     TCHAR buf[16];
     wsprintf(buf, fmt, pos);
@@ -78,6 +83,7 @@ void UpdateApplyState(HWND dlg) {
 
     const bool changed =
         WinAPI::TrackBar::GetPos(dlg, IDC_SIZE_SLIDER) != savedSize ||
+        WinAPI::TrackBar::GetPos(dlg, IDC_OPACITY_SLIDER) != Preferences::OpacityPercent() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER) != Preferences::RefreshIntervalMs() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER) != Preferences::PollIntervalMs() ||
         (IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED) != Preferences::InvertColors() ||
@@ -87,6 +93,7 @@ void UpdateApplyState(HWND dlg) {
 
 void SaveValues(HWND dlg) {
     Preferences::SetTipSizePercent(WinAPI::TrackBar::GetPos(dlg, IDC_SIZE_SLIDER));
+    Preferences::SetOpacityPercent(WinAPI::TrackBar::GetPos(dlg, IDC_OPACITY_SLIDER));
     Preferences::SetRefreshIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER));
     Preferences::SetPollIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER));
     Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
@@ -113,6 +120,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     // overwrites them, and load the size readout's "Default" text from the string table.
     LoadStr(inst, IDS_DEFAULT, g_defaultText);
     VERIFY(GetDlgItemText(dlg, IDC_SIZE_VALUE,    g_sizeFormat,    ARRAYSIZE(g_sizeFormat)));
+    VERIFY(GetDlgItemText(dlg, IDC_OPACITY_VALUE, g_opacityFormat, ARRAYSIZE(g_opacityFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_REFRESH_VALUE, g_refreshFormat, ARRAYSIZE(g_refreshFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_POLL_VALUE,    g_pollFormat,    ARRAYSIZE(g_pollFormat)));
 
@@ -137,17 +145,23 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     WinAPI::TrackBar::Init(tb, g_minPct, Preferences::kMaxPercent, kSliderTickFreq, kSliderPageStep, cur);
     UpdateValueText(dlg);
 
+    // Opacity slider: fixed percentage range from Preferences, seeded from the saved value.
+    WinAPI::TrackBar::Init(GetDlgItem(dlg, IDC_OPACITY_SLIDER),
+                           Preferences::kMinOpacityPercent, Preferences::kMaxOpacityPercent,
+                           kOpacityTickFreq, kOpacityPageStep, Preferences::OpacityPercent());
+    UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);
+
     // Timer-interval sliders: fixed ms ranges from Preferences, seeded from the saved
     // values, each with its own "NNN ms" readout.
     WinAPI::TrackBar::Init(GetDlgItem(dlg, IDC_REFRESH_SLIDER),
                            Preferences::kMinRefreshMs, Preferences::kMaxRefreshMs,
                            kRefreshTickFreq, kRefreshPageStep, Preferences::RefreshIntervalMs());
-    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
+    UpdateReadoutText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
 
     WinAPI::TrackBar::Init(GetDlgItem(dlg, IDC_POLL_SLIDER),
                            Preferences::kMinPollMs, Preferences::kMaxPollMs,
                            kPollTickFreq, kPollPageStep, Preferences::PollIntervalMs());
-    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
+    UpdateReadoutText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
 
     VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::InvertColors() ? BST_CHECKED : BST_UNCHECKED));
 
@@ -168,8 +182,9 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
 void OnHScroll(HWND dlg, HWND /*ctl*/, UINT /*code*/, int /*pos*/) {
     UpdateValueText(dlg);
-    UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
-    UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
+    UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);
+    UpdateReadoutText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
+    UpdateReadoutText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
     UpdateApplyState(dlg);
 }
 
@@ -228,12 +243,14 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         WinAPI::TrackBar::SetPos(dlg, IDC_SIZE_SLIDER, g_minPct);
+        WinAPI::TrackBar::SetPos(dlg, IDC_OPACITY_SLIDER, Preferences::kDefaultOpacityPercent);
         WinAPI::TrackBar::SetPos(dlg, IDC_REFRESH_SLIDER, Preferences::kDefaultRefreshMs);
         WinAPI::TrackBar::SetPos(dlg, IDC_POLL_SLIDER, Preferences::kDefaultPollMs);
         VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
         UpdateValueText(dlg);
-        UpdateMsText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
-        UpdateMsText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
+        UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);
+        UpdateReadoutText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
+        UpdateReadoutText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
         FontPicker::Reset(dlg);
         UpdateApplyState(dlg);
 

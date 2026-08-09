@@ -7,6 +7,7 @@ namespace {
 constexpr LPCTSTR kSection          = TEXT("Preferences");
 constexpr LPCTSTR kKeyTipSize       = TEXT("TipSizePercent");
 constexpr LPCTSTR kLegacyKeyTipSize = TEXT("LabelSizePercent");
+constexpr LPCTSTR kKeyOpacity       = TEXT("OpacityPercent");
 constexpr LPCTSTR kKeyInvert        = TEXT("InvertColors");
 constexpr LPCTSTR kKeyFontFace      = TEXT("FontFace");
 constexpr LPCTSTR kKeyFontWeight    = TEXT("FontWeight");
@@ -23,6 +24,9 @@ TCHAR g_iniPath[MAX_PATH];
 // Cached tip-size percentage in [0, 100]; mirrors the INI value.
 int g_tipPercent;
 
+// Cached opacity percentage; mirrors the INI value.
+int g_opacityPercent = Preferences::kDefaultOpacityPercent;
+
 // Cached invert-colors flag; mirrors the INI value.
 bool g_invert;
 
@@ -37,12 +41,6 @@ int g_refreshMs = Preferences::kDefaultRefreshMs;
 
 // Cached poll-timer interval in ms; mirrors the INI value.
 int g_pollMs = Preferences::kDefaultPollMs;
-
-[[nodiscard]] int ClampPercent(int v) {
-    if (v < Preferences::kMinPercent) return Preferences::kMinPercent;
-    if (v > Preferences::kMaxPercent) return Preferences::kMaxPercent;
-    return v;
-}
 
 // Clamp 'v' to the inclusive [lo, hi] range.
 [[nodiscard]] int Clamp(int v, int lo, int hi) {
@@ -90,6 +88,13 @@ void WriteInt(LPCTSTR key, int value) {
     return ReadInt(key, def ? 1 : 0) != 0;
 }
 
+// Read an integer preference under the given key from the INI file (or 'def' if absent),
+// clamped to [lo, hi] (defaulting to the tip-size percentage bounds so the common case
+// needs no explicit bounds).
+[[nodiscard]] int ReadPercent(LPCTSTR key, int def, int lo = Preferences::kMinPercent, int hi = Preferences::kMaxPercent) {
+    return Clamp(ReadInt(key, def), lo, hi);
+}
+
 // Persist a string preference under the given key in the INI file. A null 'value' removes
 // the key from the section.
 void WriteString(LPCTSTR key, LPCTSTR value) {
@@ -108,11 +113,12 @@ namespace Preferences {
 
 void Load() {
     BuildIniPath();
-    const int legacyTipPercent = ReadInt(kLegacyKeyTipSize, 0);
-    g_tipPercent = ClampPercent(ReadInt(kKeyTipSize, legacyTipPercent));
+    const int legacyTipPercent = ReadPercent(kLegacyKeyTipSize, 0);
+    g_tipPercent = ReadPercent(kKeyTipSize, legacyTipPercent);
+    g_opacityPercent = ReadPercent(kKeyOpacity, kDefaultOpacityPercent, kMinOpacityPercent, kMaxOpacityPercent);
     g_invert       = ReadBool(kKeyInvert, false);
-    g_refreshMs    = Clamp(ReadInt(kKeyRefreshMs, kDefaultRefreshMs), kMinRefreshMs, kMaxRefreshMs);
-    g_pollMs       = Clamp(ReadInt(kKeyPollMs, kDefaultPollMs), kMinPollMs, kMaxPollMs);
+    g_refreshMs    = ReadPercent(kKeyRefreshMs, kDefaultRefreshMs, kMinRefreshMs, kMaxRefreshMs);
+    g_pollMs       = ReadPercent(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
 
     ZeroMemory(&g_font, sizeof(g_font));
     TCHAR face[LF_FACESIZE];
@@ -133,9 +139,18 @@ int TipSizePercent() {
 }
 
 void SetTipSizePercent(int percent) {
-    g_tipPercent = ClampPercent(percent);
+    g_tipPercent = Clamp(percent, kMinPercent, kMaxPercent);
     WriteInt(kKeyTipSize, g_tipPercent);
     WriteString(kLegacyKeyTipSize, nullptr);
+}
+
+int OpacityPercent() {
+    return g_opacityPercent;
+}
+
+void SetOpacityPercent(int percent) {
+    g_opacityPercent = Clamp(percent, kMinOpacityPercent, kMaxOpacityPercent);
+    WriteInt(kKeyOpacity, g_opacityPercent);
 }
 
 bool InvertColors() {
