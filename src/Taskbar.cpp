@@ -5,6 +5,13 @@ namespace {
 
 constexpr LPCTSTR kTaskButtonClass = TEXT("Taskbar.TaskListButtonAutomationPeer");
 
+// Windows 10's taskbar never exposes the class name above at all -- that automation
+// peer belongs to the Windows 11 taskbar rewrite -- so the Windows 11 queries always
+// come up empty there. Windows 10 instead groups every pinned/running app button in
+// this distinct native child control (the "Running Applications" toolbar), kept
+// separate from the Start button, search box and system tray.
+constexpr LPCTSTR kWin10TaskListClass = TEXT("MSTaskListWClass");
+
 // Collect the non-degenerate bounding rectangles of every element under 'root' that
 // matches 'cond', writing up to 'max' of them to 'out' (in tree order == Win+0..9).
 // When 'clip' is non-null a button is kept only if its rectangle intersects *clip --
@@ -34,6 +41,65 @@ constexpr LPCTSTR kTaskButtonClass = TEXT("Taskbar.TaskListButtonAutomationPeer"
         }
         arr->Release();
     }
+
+    return count;
+}
+
+// Windows 10 path: find the "Running Applications" toolbar under 'taskbarEl' and,
+// once found, treat every Button-type element under it as a genuine app button -- the
+// container is already scoped away from the Start button, search box and system tray,
+// so (unlike the Windows 11 query) no class-name or automation-id filtering is needed
+// on top of it. Mirrors the strict/lenient pair above: prefer buttons UI Automation
+// reports on-screen, and fall back to every button kept on-taskbar geometrically when
+// the tree transiently reports them all as offscreen. 'condOnScreen' is the caller's
+// already-created IsOffscreen==FALSE condition, reused here. Only called once
+// WinAPI::OS::IsWindows10() has confirmed the OS, so an empty result here means the
+// container itself was not found rather than a wrong-OS miss. Returns the number of
+// rectangles written to 'out' (0 when the container is not found).
+[[nodiscard]] int CollectLegacyRects(IUIAutomation* uia, IUIAutomationElement* taskbarEl, HWND taskbar,
+                                     IUIAutomationCondition* condOnScreen, RECT* out, int max) {
+    VARIANT vListClass;
+    vListClass.vt = VT_BSTR;
+    vListClass.bstrVal = SysAllocString(kWin10TaskListClass);
+
+    IUIAutomationCondition* condListClass = nullptr;
+    uia->CreatePropertyCondition(UIA_ClassNamePropertyId, vListClass, &condListClass);
+
+    IUIAutomationElement* listEl = nullptr;
+    if (condListClass)
+        taskbarEl->FindFirst(TreeScope_Descendants, condListClass, &listEl);
+
+    int count = 0;
+    if (listEl) {
+        VARIANT vButton;
+        vButton.vt = VT_I4;
+        vButton.lVal = UIA_ButtonControlTypeId;
+
+        IUIAutomationCondition* condButton = nullptr;
+        IUIAutomationCondition* condButtonStrict = nullptr;
+        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, vButton, &condButton);
+        if (condButton && condOnScreen)
+            uia->CreateAndCondition(condButton, condOnScreen, &condButtonStrict);
+
+        // Primary: on-screen Button-type elements under the task-list container.
+        if (condButtonStrict)
+            count = CollectRects(listEl, condButtonStrict, nullptr, out, max);
+
+        // Same transient "everything reports offscreen" glitch as the Windows 11
+        // path can hit -- retry on control type alone, kept on-taskbar geometrically.
+        if (count == 0 && condButton) {
+            RECT taskbarRc;
+            if (GetWindowRect(taskbar, &taskbarRc))
+                count = CollectRects(listEl, condButton, &taskbarRc, out, max);
+        }
+
+        if (condButtonStrict) condButtonStrict->Release();
+        if (condButton) condButton->Release();
+        listEl->Release();
+    }
+
+    if (condListClass) condListClass->Release();
+    SysFreeString(vListClass.bstrVal);
 
     return count;
 }
@@ -100,23 +166,33 @@ int CollectButtonRects(IUIAutomation* uia, HWND taskbar, RECT* out, int max) {
 
     int count = 0;
 
-    // Primary: buttons matched by class name AND reported on-screen by UI Automation.
-    // This is the common path and keeps phantom notification area peers out.
-    if (condStrict)
-        count = CollectRects(taskbarEl, condStrict, nullptr, out, max);
+    // Windows 10 never exposes kTaskButtonClass (see the comment on it above), so the
+    // Windows 11 queries below could never match there -- check the OS version up
+    // front and go straight to the differently shaped Windows 10 automation tree
+    // instead of paying for two FindAll traversals that are guaranteed to come up
+    // empty.
+    if (WinAPI::OS::IsWindows10()) {
+        count = CollectLegacyRects(uia, taskbarEl, taskbar, condOnScreen, out, max);
+    } else {
+        // Primary: buttons matched by class name AND reported on-screen by UI
+        // Automation. This is the common path and keeps phantom notification area
+        // peers out.
+        if (condStrict)
+            count = CollectRects(taskbarEl, condStrict, nullptr, out, max);
 
-    // Fallback: some taskbar states transiently report every button's UI Automation
-    // IsOffscreen as TRUE (e.g. right after a foreground / virtual-desktop switch, or
-    // when the desktop has focus), which makes the strict query -- and therefore the
-    // whole overlay -- come up empty until an Alt+Tab wakes the tree. That was the
-    // "sometimes the strip does not appear" glitch. When nothing matched, retry on
-    // class name alone and keep only buttons whose rectangle actually sits on the
-    // taskbar, so real buttons still show while genuine off-taskbar phantoms are
-    // excluded geometrically.
-    if (count == 0 && condName) {
-        RECT taskbarRc;
-        if (GetWindowRect(taskbar, &taskbarRc))
-            count = CollectRects(taskbarEl, condName, &taskbarRc, out, max);
+        // Fallback: some taskbar states transiently report every button's UI
+        // Automation IsOffscreen as TRUE (e.g. right after a foreground /
+        // virtual-desktop switch, or when the desktop has focus), which makes the
+        // strict query -- and therefore the whole overlay -- come up empty until an
+        // Alt+Tab wakes the tree. That was the "sometimes the strip does not appear"
+        // glitch. When nothing matched, retry on class name alone and keep only
+        // buttons whose rectangle actually sits on the taskbar, so real buttons
+        // still show while genuine off-taskbar phantoms are excluded geometrically.
+        if (count == 0 && condName) {
+            RECT taskbarRc;
+            if (GetWindowRect(taskbar, &taskbarRc))
+                count = CollectRects(taskbarEl, condName, &taskbarRc, out, max);
+        }
     }
 
     if (condStrict) condStrict->Release();

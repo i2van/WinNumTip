@@ -136,6 +136,41 @@ inline LPCTSTR LoadStr(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
 // glance which raw API it stands for.
 namespace WinAPI {
 
+namespace OS {
+
+// IsWindows10(): true on Windows 10 (build < 22000, the first public Windows 11
+// build); false on Windows 11 and later. WinNumTip.manifest opts in to the Windows
+// 10/11 compatibility GUID, so VerifyVersionInfo reports the real build number here
+// instead of lying about it the way it would for an unmanifested caller.
+//
+// The result cannot change for the life of the process, so it is computed once and
+// cached in a local static -- but as a plain constant-initialized int, not a
+// function-local static with a runtime initializer: that form's thread-safe init
+// guard needs CRT support (_Init_thread_header and friends) this /NODEFAULTLIB,
+// no-CRT build does not link against.
+[[nodiscard]] inline bool IsWindows10() {
+    static int cached = -1;   // -1 = not yet checked, 0 = false, 1 = true
+    if (cached < 0) {
+        OSVERSIONINFOEXW vi;
+        ZeroMemory(&vi, sizeof(vi));
+        vi.dwOSVersionInfoSize = sizeof(vi);
+        vi.dwMajorVersion = 10;
+        vi.dwMinorVersion = 0;
+        vi.dwBuildNumber  = 22000;
+
+        DWORDLONG mask = 0;
+        VER_SET_CONDITION(mask, VER_MAJORVERSION, VER_EQUAL);
+        VER_SET_CONDITION(mask, VER_MINORVERSION, VER_EQUAL);
+        VER_SET_CONDITION(mask, VER_BUILDNUMBER,  VER_LESS);
+
+        cached = ::VerifyVersionInfoW(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask) != FALSE
+                     ? 1 : 0;
+    }
+    return cached != 0;
+}
+
+} // namespace OS
+
 namespace Process {
 
 // Terminate(): leave the current process immediately, without running the loader's DLL detach

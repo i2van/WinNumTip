@@ -79,7 +79,7 @@ immediately.
 
 ## Requirements
 
-- Windows 11
+- Windows 10/11
 
 ## Troubleshooting
 
