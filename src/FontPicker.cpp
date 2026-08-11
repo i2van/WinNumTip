@@ -39,7 +39,7 @@ void UpdateFontPreview(HWND dlg) {
     TCHAR def[16];
     FontPreview::Update(GetDlgItem(dlg, IDC_FONT_NAME),
                         g_workingFontSet ? g_workingFont.lfFaceName
-                                         : LoadStr(g_inst, IDS_DEFAULT, def),
+                                         : WinAPI::String::Load(g_inst, IDS_DEFAULT, def),
                         g_workingFont);
 }
 

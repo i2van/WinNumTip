@@ -37,7 +37,7 @@ void Add(HINSTANCE inst, HWND msgWnd) {
     if (g_nid.hIcon) g_ownedIcon = g_nid.hIcon;
     else             g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
 
-    LoadStr(inst, IDS_TOOLTIP, g_nid.szTip);
+    WinAPI::String::Load(inst, IDS_TOOLTIP, g_nid.szTip);
 
     VERIFY(Shell_NotifyIcon(NIM_ADD, &g_nid));
 }

@@ -118,7 +118,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
 
     // Capture the value-readout templates from the dialog resource before the first update
     // overwrites them, and load the size readout's "Default" text from the string table.
-    LoadStr(inst, IDS_DEFAULT, g_defaultText);
+    WinAPI::String::Load(inst, IDS_DEFAULT, g_defaultText);
     VERIFY(GetDlgItemText(dlg, IDC_SIZE_VALUE,    g_sizeFormat,    ARRAYSIZE(g_sizeFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_OPACITY_VALUE, g_opacityFormat, ARRAYSIZE(g_opacityFormat)));
     VERIFY(GetDlgItemText(dlg, IDC_REFRESH_VALUE, g_refreshFormat, ARRAYSIZE(g_refreshFormat)));
@@ -278,13 +278,13 @@ void OnActivate(HWND /*dlg*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
 // re-triggers OnActivate above, which hands activation straight back to the font dialog --
 // net effect, both windows come forward together with the font dialog back on top.
 void OnActivateOwner(HWND dlg) {
-    ForegroundDialog(dlg);
+    WinAPI::Dialog::Foreground(dlg);
 }
 
 // WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
-// style adds, opening the README's Preferences section (see OpenUrlOnContextHelp).
+// style adds, opening the README's Preferences section (see WinAPI::Url::OpenOnContextHelp).
 void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
-    OpenUrlOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md#preferences"));
+    WinAPI::Url::OpenOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md#preferences"));
 }
 
 INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -325,7 +325,7 @@ bool ActivateDialog() {
         // Nothing to keep in order behind -- just foreground Preferences normally, skipping
         // when it already is (see below for why that matters).
         if (GetForegroundWindow() == g_dlg) return true;
-        ForegroundDialog(g_dlg);
+        WinAPI::Dialog::Foreground(g_dlg);
         return true;
     }
 

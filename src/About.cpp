@@ -83,7 +83,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
          idCtrl == IDC_ABOUT_PROJECT_SITE) &&
         (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         const PNMLINK link = reinterpret_cast<PNMLINK>(hdr);
-        OpenUrl(dlg, link->item.szUrl);
+        WinAPI::Url::Open(dlg, link->item.szUrl);
 
         return TRUE;
     }
@@ -96,9 +96,9 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT /*notify*/) {
 }
 
 // WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
-// style adds, opening the README (see OpenUrlOnContextHelp).
+// style adds, opening the README (see WinAPI::Url::OpenOnContextHelp).
 void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
-    OpenUrlOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md"));
+    WinAPI::Url::OpenOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md"));
 }
 
 INT_PTR CALLBACK AboutProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -126,7 +126,7 @@ void Show(HINSTANCE inst, HWND owner) {
     // last active popup, so if a Preferences dialog was opened from it (and is thus on top),
     // re-invoking About (e.g. from the notification area) resurfaces that Preferences
     // dialog rather than hiding it behind About.
-    if (g_dlg) { ForegroundDialog(g_dlg); return; }
+    if (g_dlg) { WinAPI::Dialog::Foreground(g_dlg); return; }
     VERIFY(DialogBoxParam(inst, MAKEINTRESOURCE(IDD_ABOUT), owner, AboutProc, reinterpret_cast<LPARAM>(inst)) != -1);
     g_dlg = nullptr;
 }

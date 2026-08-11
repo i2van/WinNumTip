@@ -81,47 +81,6 @@ extern "C" {
     #define VERIFY_SHELLEXEC(expr) ((void)(expr))
 #endif
 
-// OpenUrl(owner, url): open 'url' with the shell's default handler (a web browser for
-// http/https links), owned by 'owner'. Wrapped in VERIFY_SHELLEXEC so a failure (a
-// ShellExecute result <= 32) breaks into the debugger in Debug and is a no-op check in
-// Release.
-inline void OpenUrl(HWND owner, LPCTSTR url) {
-    VERIFY_SHELLEXEC(ShellExecute(owner, TEXT("open"), url, nullptr, nullptr, SW_SHOWNORMAL));
-}
-
-// OpenUrlOnContextHelp(dlg, cmd, x, y, url): shared WM_SYSCOMMAND body for the DS_CONTEXTHELP
-// dialogs. The title-bar "?" (context-help) button opens 'url' -- the dialog's README section
-// -- instead of entering Windows' per-control help mode; every other system command (move,
-// close, ...) is forwarded to the default handler unchanged. Each dialog's cracker-dispatched
-// OnSysCommand forwards here with the URL it documents (see HANDLE_WM_SYSCOMMAND callers).
-inline void OpenUrlOnContextHelp(HWND dlg, UINT cmd, int x, int y, LPCTSTR url) {
-    if ((cmd & 0xFFF0) == SC_CONTEXTHELP)
-        OpenUrl(dlg, url);
-    else
-        FORWARD_WM_SYSCOMMAND(dlg, cmd, x, y, DefWindowProc);
-}
-
-// ForegroundDialog(dlg[, top]): bring an already-open modal dialog back to the foreground on
-// a repeat "open" request, so a second instance is never created. Prefers 'top' when given
-// -- e.g. a common dialog (ChooseFont) running over 'dlg', whose owner is disabled while the
-// common dialog is modal -- otherwise 'dlg's last active popup, which resurfaces a child
-// dialog opened from 'dlg' (GetLastActivePopup returns 'dlg' itself when it owns no popups).
-inline void ForegroundDialog(HWND dlg, HWND top = nullptr) {
-    SetForegroundWindow(top ? top : GetLastActivePopup(dlg));
-}
-
-// LoadStr(inst, id, buffer): load the string resource 'id' from 'inst' into the fixed-size
-// stack 'buffer', with its capacity deduced as the template size parameter N. buffer[0] is
-// cleared first so a missing or empty resource leaves a valid, null-terminated empty string
-// rather than uninitialized stack memory -- callers can use the result unconditionally.
-// Returns 'buffer' so it can be passed straight to an API (e.g. MessageBox, SetWindowText).
-template <int N>
-inline LPCTSTR LoadStr(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
-    buffer[0] = 0;
-    LoadString(inst, id, buffer, N);
-    return buffer;
-}
-
 // Wrappers that collapse a Win32 call sequence this app repeats verbatim into a single
 // operation: the SetFocus dance around disabling a dialog button, the handle-nulling cleanup
 // of an owned GDI object, the boilerplate around a *Ex struct, and so on.
@@ -135,6 +94,59 @@ inline LPCTSTR LoadStr(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
 // The underlying Win32 call is always written ::qualified, so a wrapper body still shows at a
 // glance which raw API it stands for.
 namespace WinAPI {
+
+namespace Url {
+
+// Open(owner, url): open 'url' with the shell's default handler (a web browser for
+// http/https links), owned by 'owner'. Wrapped in VERIFY_SHELLEXEC so a failure (a
+// ShellExecute result <= 32) breaks into the debugger in Debug and is a no-op check in
+// Release.
+inline void Open(HWND owner, LPCTSTR url) {
+    VERIFY_SHELLEXEC(::ShellExecute(owner, TEXT("open"), url, nullptr, nullptr, SW_SHOWNORMAL));
+}
+
+// OpenOnContextHelp(dlg, cmd, x, y, url): shared WM_SYSCOMMAND body for the DS_CONTEXTHELP
+// dialogs. The title-bar "?" (context-help) button opens 'url' -- the dialog's README section
+// -- instead of entering Windows' per-control help mode; every other system command (move,
+// close, ...) is forwarded to the default handler unchanged. Each dialog's cracker-dispatched
+// OnSysCommand forwards here with the URL it documents (see HANDLE_WM_SYSCOMMAND callers).
+inline void OpenOnContextHelp(HWND dlg, UINT cmd, int x, int y, LPCTSTR url) {
+    if ((cmd & 0xFFF0) == SC_CONTEXTHELP)
+        Open(dlg, url);
+    else
+        FORWARD_WM_SYSCOMMAND(dlg, cmd, x, y, DefWindowProc);
+}
+
+} // namespace Url
+
+namespace Dialog {
+
+// Foreground(dlg[, top]): bring an already-open modal dialog back to the foreground on
+// a repeat "open" request, so a second instance is never created. Prefers 'top' when given
+// -- e.g. a common dialog (ChooseFont) running over 'dlg', whose owner is disabled while the
+// common dialog is modal -- otherwise 'dlg's last active popup, which resurfaces a child
+// dialog opened from 'dlg' (GetLastActivePopup returns 'dlg' itself when it owns no popups).
+inline void Foreground(HWND dlg, HWND top = nullptr) {
+    ::SetForegroundWindow(top ? top : GetLastActivePopup(dlg));
+}
+
+} // namespace Dialog
+
+namespace String {
+
+// Load(inst, id, buffer): load the string resource 'id' from 'inst' into the fixed-size
+// stack 'buffer', with its capacity deduced as the template size parameter N. buffer[0] is
+// cleared first so a missing or empty resource leaves a valid, null-terminated empty string
+// rather than uninitialized stack memory -- callers can use the result unconditionally.
+// Returns 'buffer' so it can be passed straight to an API (e.g. MessageBox, SetWindowText).
+template <int N>
+inline LPCTSTR Load(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
+    buffer[0] = 0;
+    ::LoadString(inst, id, buffer, N);
+    return buffer;
+}
+
+} // namespace String
 
 namespace OS {
 

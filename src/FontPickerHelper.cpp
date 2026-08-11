@@ -778,8 +778,8 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
 void ShowError(HINSTANCE inst, HWND owner) {
     TCHAR text[96], caption[32];
-    MessageBox(owner, LoadStr(inst, IDS_FONT_PICKER_ERROR, text),
-               LoadStr(inst, IDS_APP_NAME, caption), MB_OK | MB_ICONERROR);
+    MessageBox(owner, WinAPI::String::Load(inst, IDS_FONT_PICKER_ERROR, text),
+               WinAPI::String::Load(inst, IDS_APP_NAME, caption), MB_OK | MB_ICONERROR);
 }
 
 } // namespace
