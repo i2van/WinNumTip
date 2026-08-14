@@ -122,7 +122,9 @@ extern "C" void Entry() {
         WinAPI::Process::Terminate();
     }
 
-    // Enforce a single running instance via a named mutex (UUID-based name).
+    // Enforce a single running instance via a named mutex (UUID-based name). The handle
+    // is intentionally never closed: it must stay alive for the whole process lifetime,
+    // and the OS closes it automatically on exit, so there is nothing to leak.
     CreateMutex(nullptr, TRUE, kMutexName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
 

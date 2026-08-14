@@ -654,16 +654,28 @@ BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam)
             monitor.cbSize = sizeof(monitor);
             if (GetMonitorInfo(
                     MonitorFromWindow(g_parentDialog, MONITOR_DEFAULTTONEAREST), &monitor)) {
-                if (x < monitor.rcWork.left) x = monitor.rcWork.left;
-                if (y < monitor.rcWork.top) y = monitor.rcWork.top;
-                if (x + width > monitor.rcWork.right) x = monitor.rcWork.right - width;
-                if (y + height > monitor.rcWork.bottom) y = monitor.rcWork.bottom - height;
+                x = max(x, monitor.rcWork.left);
+                y = max(y, monitor.rcWork.top);
+                x = min(x, monitor.rcWork.right - width);
+                y = min(y, monitor.rcWork.bottom - height);
             }
             SetWindowPos(dialog, nullptr, x, y, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
     }
     SetForegroundWindow(dialog);
+    // Belt-and-braces for the case SetForegroundWindow above is silently denied -- observed
+    // right after the Win key itself is pressed, which the shell treats as its own
+    // foreground-changing input and can invalidate the one-time AllowSetForegroundWindow grant
+    // FontPickerHelper::Open made to this freshly-launched helper process just before
+    // CreateProcess. Without this, the dialog is left wherever it was created, which can be
+    // behind Preferences; SWP_NOACTIVATE means this z-order move needs no foreground
+    // permission of its own, so -- as in OnActivateChooseFont -- it reliably keeps the dialog
+    // above Preferences (its real owner is the hidden helper window, not Preferences, so no
+    // owner/popup relationship would otherwise enforce that) regardless of who ends up truly
+    // foreground.
+    if (g_exchange && IsWindow(g_exchange->owner))
+        SetWindowPos(g_exchange->owner, dialog, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (const HWND sample = GetDlgItem(dialog, stc5)) {
         VERIFY(SetWindowSubclass(sample, FontSampleSubclassProc, kSampleSubclassId, 0));

@@ -7,8 +7,17 @@
 // Six preferences today:
 //  - the overlay "tip size" (see below),
 //  - "opacity": how opaque the overlay window is, as a percentage (see below),
-//  - "invert colors": whether the strip and number colors are swapped for a highlighted
-//    look,
+//  - "render flags": four on/off toggles for the overlay's look, packed as single-bit
+//    fields in one RenderFlags struct (see below) -- "invert colors" swaps the strip and
+//    number colors for a highlighted look; "hide border" / "hide separator" each strip
+//    away one visual layer (the strip's border, the divider lines between number tips)
+//    for a progressively more minimal look; and "compact" shrinks the strip's window
+//    down to a border and a small square around each digit, letting whatever is behind
+//    the overlay show through everywhere else -- framing each digit's square with its
+//    own border individually instead of framing the whole strip with one, which already
+//    makes a separator between tips redundant, so checking it forces (and, in the
+//    dialog, hides) "hide separator" too, though "hide border" still applies, now to
+//    each of those per-tip borders,
 //  - "font": the face + style (weight/italic/underline/strikeout) the numbers are drawn
 //    with, chosen from the font dialog; unset means the taskbar's own font (the fallback),
 //  - "refresh interval": how often (ms) the shown overlay re-checks the taskbar buttons
@@ -73,12 +82,35 @@ void SetTipSizePercent(int percent);
 // in memory and in the INI file next to the executable.
 void SetOpacityPercent(int percent);
 
-// Whether the overlay draws with inverted colors: the strip is filled with the number
-// color and the numbers are drawn in the bar color (a highlighted look).
-[[nodiscard]] bool InvertColors();
+// The overlay's on/off rendering toggles (see the file header), packed as single-bit
+// fields and bundled in one struct rather than kept as separate bools so the model, the
+// dialog, and the INI persistence can load/save/compare them together.
+struct RenderFlags {
+    // Strip filled with the number color, numbers drawn in the bar color (a highlighted
+    // look).
+    bool invertColors : 1 = false;
+    // Shrink the strip's window down to a border and a small square around each digit,
+    // letting whatever is behind the overlay show through everywhere else (see
+    // ApplyStripRegion). The border frames each digit's square individually rather than
+    // the whole strip (see PaintBorder), which already makes a separator between tips
+    // redundant, so this forces hideSeparator true as well (the dialog hides that
+    // checkbox while this is checked); hideBorder still applies as normal, now to those
+    // per-tip borders.
+    bool compact       : 1 = false;
+    // Suppress the border: the whole strip's outer border normally, or each tip's own
+    // border individually when compact is set (see PaintBorder).
+    bool hideBorder    : 1 = false;
+    // Suppress the divider line(s) between number tips.
+    bool hideSeparator : 1 = false;
 
-// Store the invert-colors flag both in memory and in the INI file next to the executable.
-void SetInvertColors(bool invert);
+    [[nodiscard]] friend bool operator==(const RenderFlags&, const RenderFlags&) = default;
+};
+
+// Current rendering toggles (see RenderFlags).
+[[nodiscard]] const RenderFlags& Flags();
+
+// Store 'flags' both in memory and in the INI file next to the executable.
+void SetFlags(const RenderFlags& flags);
 
 // Whether the overlay draws the numbers with a user-selected font (FontIsSet) and, if so,
 // the LOGFONT describing it. Only the face and style fields (lfFaceName, lfWeight,

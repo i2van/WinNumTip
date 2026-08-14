@@ -28,6 +28,9 @@ position - **WinNumTip** just reminds you which number is which.
 - Adjustable tip size via the notification area icon's **Preferences** dialog - from the
   default slim strip up to the full taskbar-button size (tip height for a
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
+- The same dialog also offers a custom tip font (or the taskbar's own by default),
+  inverted colors, a compact view, independent border/separator hiding, adjustable tip
+  opacity, and tunable refresh/`Win` key poll intervals.
 
 ## Preferences
 
@@ -37,6 +40,12 @@ Double-click the notification area icon, right-click it and choose **Preferences
 Settings are saved next to the app in `WinNumTip.ini`. Click **Apply** to save them
 without closing the dialog, or **OK** to save and close; applied settings take effect
 immediately.
+
+> [!TIP]
+> Hold `Win` to keep the strip showing, then adjust settings in **Preferences** and click
+> **Apply** to preview the change live on the taskbar without releasing `Win` or closing
+> the dialog. In the font selector, double-click an entry in the **Font** or **Font
+> style** list to apply it the same way.
 
 - **Tip size** - how thick the numbered strip is across the taskbar: its height on a
   horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
@@ -55,6 +64,21 @@ immediately.
   default.
 
   > `WinNumTip.ini` keys: `InvertColors`
+
+- **Compact view** - shrinks the strip's window down to a border and a small square around
+  each digit.
+
+  > `WinNumTip.ini` keys: `CompactView`
+
+- **Hide border** - hides the strip's outer border, or (in **Compact view** mode) each tip's
+  own border individually. Off by default (border shown).
+
+  > `WinNumTip.ini` keys: `HideBorder`
+
+- **Hide separator** - hides the divider lines between number tips. Off by default
+  (separators shown).
+
+  > `WinNumTip.ini` keys: `HideSeparator`
 
 - **Tip opacity** - how opaque the overlay window is, as a percentage. Range `10`-`100`%,
   default `100`% (fully opaque).

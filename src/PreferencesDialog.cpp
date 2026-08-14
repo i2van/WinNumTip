@@ -76,17 +76,46 @@ void UpdateReadoutText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     VERIFY(SetDlgItemText(dlg, valueId, buf));
 }
 
+// Read the four render-flag checkboxes into a Preferences::RenderFlags, for comparing
+// against (UpdateApplyState) or saving (SaveValues) the persisted flags as one unit.
+// hideSeparator reads as forced true whenever compact is checked, matching
+// ApplyStripRegion/PaintBorder (compact already draws a border framing each tip
+// individually, which doubles as the divider between them, so a separator on top would
+// be redundant) and the dialog, which hides its checkbox in that state (see
+// UpdateCompactVisibility) rather than leave it showing a value that no longer does
+// anything. hideBorder is read as-is: compact still lets it suppress that per-tip
+// border, so its checkbox stays visible and independent.
+[[nodiscard]] Preferences::RenderFlags ReadFlags(HWND dlg) {
+    const bool compact = IsDlgButtonChecked(dlg, IDC_COMPACT_VIEW) == BST_CHECKED;
+    return {
+        .invertColors  = IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED,
+        .compact       = compact,
+        .hideBorder    = IsDlgButtonChecked(dlg, IDC_HIDE_BORDER) == BST_CHECKED,
+        .hideSeparator = compact || IsDlgButtonChecked(dlg, IDC_HIDE_SEPARATOR) == BST_CHECKED,
+    };
+}
+
+// Show or hide the Hide separator checkbox based on whether Compact view is currently
+// checked: compact forces it on anyway (see ReadFlags), so it would offer no real choice
+// while checked. Hide border stays visible regardless -- compact still honors it, just
+// against each tip's own border instead of the whole strip's. The separator checkbox's
+// own checked state is left untouched underneath, so unchecking Compact view again brings
+// back whatever it was set to before.
+void UpdateCompactVisibility(HWND dlg) {
+    const bool compact = IsDlgButtonChecked(dlg, IDC_COMPACT_VIEW) == BST_CHECKED;
+    ShowWindow(GetDlgItem(dlg, IDC_HIDE_SEPARATOR), compact ? SW_HIDE : SW_SHOW);
+}
+
 void UpdateApplyState(HWND dlg) {
-    int savedSize = Preferences::TipSizePercent();
-    if (savedSize < g_minPct) savedSize = g_minPct;
-    else if (savedSize > Preferences::kMaxPercent) savedSize = Preferences::kMaxPercent;
+    const int tipPercent = Preferences::TipSizePercent();
+    const int savedSize = max(g_minPct, min(tipPercent, Preferences::kMaxPercent));
 
     const bool changed =
         WinAPI::TrackBar::GetPos(dlg, IDC_SIZE_SLIDER) != savedSize ||
         WinAPI::TrackBar::GetPos(dlg, IDC_OPACITY_SLIDER) != Preferences::OpacityPercent() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER) != Preferences::RefreshIntervalMs() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER) != Preferences::PollIntervalMs() ||
-        (IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED) != Preferences::InvertColors() ||
+        ReadFlags(dlg) != Preferences::Flags() ||
         FontPicker::HasChanges();
     WinAPI::Window::Enable(GetDlgItem(dlg, IDC_APPLY), changed);
 }
@@ -96,7 +125,7 @@ void SaveValues(HWND dlg) {
     Preferences::SetOpacityPercent(WinAPI::TrackBar::GetPos(dlg, IDC_OPACITY_SLIDER));
     Preferences::SetRefreshIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER));
     Preferences::SetPollIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER));
-    Preferences::SetInvertColors(IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED);
+    Preferences::SetFlags(ReadFlags(dlg));
     FontPicker::Save();
 }
 
@@ -134,12 +163,11 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_minPct = kMinSliderPct;
     if (Overlay::TipSizeBounds(defThick, btnThick, vertical) && btnThick > 0) {
         g_minPct = MulDiv(defThick, Preferences::kMaxPercent, btnThick);
-        if (g_minPct < kMinSliderPct) g_minPct = kMinSliderPct;
-        else if (g_minPct > Preferences::kMaxPercent) g_minPct = Preferences::kMaxPercent;
+        g_minPct = max(kMinSliderPct, min(g_minPct, Preferences::kMaxPercent));
     }
 
-    int cur = Preferences::TipSizePercent();
-    if (cur < g_minPct) cur = g_minPct; else if (cur > Preferences::kMaxPercent) cur = Preferences::kMaxPercent;
+    const int tipPercent = Preferences::TipSizePercent();
+    const int cur = max(g_minPct, min(tipPercent, Preferences::kMaxPercent));
 
     const HWND tb = GetDlgItem(dlg, IDC_SIZE_SLIDER);
     WinAPI::TrackBar::Init(tb, g_minPct, Preferences::kMaxPercent, kSliderTickFreq, kSliderPageStep, cur);
@@ -163,7 +191,11 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
                            kPollTickFreq, kPollPageStep, Preferences::PollIntervalMs());
     UpdateReadoutText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
 
-    VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::InvertColors() ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::Flags().invertColors ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_COMPACT_VIEW, Preferences::Flags().compact ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, Preferences::Flags().hideBorder ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, Preferences::Flags().hideSeparator ? BST_CHECKED : BST_UNCHECKED));
+    UpdateCompactVisibility(dlg);
 
     // Seed and show the font preview from the saved selection (or the fallback when none is
     // set); the font picker owns this state.
@@ -210,7 +242,12 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
             FontPicker::Open(dlg);
             UpdateApplyState(dlg);
             break;
+        case IDC_COMPACT_VIEW:
+            if (notify == BN_CLICKED) UpdateCompactVisibility(dlg);
+            [[fallthrough]];
         case IDC_INVERT:
+        case IDC_HIDE_BORDER:
+        case IDC_HIDE_SEPARATOR:
             if (notify == BN_CLICKED) UpdateApplyState(dlg);
             break;
         case IDCANCEL:
@@ -242,10 +279,10 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
 }
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
-// dialog's controls to their factory defaults -- the slim "Default" strip, colors not
-// inverted, and the fallback (taskbar) font. Only the controls are reset here; the change
-// is persisted only if the user then confirms with OK or Apply, so Cancel still discards
-// unapplied changes.
+// dialog's controls to their factory defaults -- the slim "Default" strip, no render
+// flags set (colors not inverted, border/separator shown, not compact), and the
+// fallback (taskbar) font. Only the controls are reset here; the change is persisted only
+// if the user then confirms with OK or Apply, so Cancel still discards unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         WinAPI::TrackBar::SetPos(dlg, IDC_SIZE_SLIDER, g_minPct);
@@ -253,6 +290,10 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         WinAPI::TrackBar::SetPos(dlg, IDC_REFRESH_SLIDER, Preferences::kDefaultRefreshMs);
         WinAPI::TrackBar::SetPos(dlg, IDC_POLL_SLIDER, Preferences::kDefaultPollMs);
         VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
+        VERIFY(CheckDlgButton(dlg, IDC_COMPACT_VIEW, BST_UNCHECKED));
+        VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, BST_UNCHECKED));
+        VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, BST_UNCHECKED));
+        UpdateCompactVisibility(dlg);
         UpdateValueText(dlg);
         UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);
         UpdateReadoutText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);

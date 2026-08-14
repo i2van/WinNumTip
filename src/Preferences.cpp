@@ -9,6 +9,9 @@ constexpr LPCTSTR kKeyTipSize       = TEXT("TipSizePercent");
 constexpr LPCTSTR kLegacyKeyTipSize = TEXT("LabelSizePercent");
 constexpr LPCTSTR kKeyOpacity       = TEXT("OpacityPercent");
 constexpr LPCTSTR kKeyInvert        = TEXT("InvertColors");
+constexpr LPCTSTR kKeyHideBorder    = TEXT("HideBorder");
+constexpr LPCTSTR kKeyHideSeparator = TEXT("HideSeparator");
+constexpr LPCTSTR kKeyCompactView   = TEXT("CompactView");
 constexpr LPCTSTR kKeyFontFace      = TEXT("FontFace");
 constexpr LPCTSTR kKeyFontWeight    = TEXT("FontWeight");
 constexpr LPCTSTR kKeyFontItalic    = TEXT("FontItalic");
@@ -27,8 +30,8 @@ int g_tipPercent;
 // Cached opacity percentage; mirrors the INI value.
 int g_opacityPercent = Preferences::kDefaultOpacityPercent;
 
-// Cached invert-colors flag; mirrors the INI value.
-bool g_invert;
+// Cached rendering toggles; mirrors the INI values.
+Preferences::RenderFlags g_flags;
 
 // Cached selected font (only lfFaceName + the weight/italic/underline/strikeout style
 // fields are meaningful; height/charset are the overlay's/dialog's concern). Valid only
@@ -44,9 +47,7 @@ int g_pollMs = Preferences::kDefaultPollMs;
 
 // Clamp 'v' to the inclusive [lo, hi] range.
 [[nodiscard]] int Clamp(int v, int lo, int hi) {
-    if (v < lo) return lo;
-    if (v > hi) return hi;
-    return v;
+    return max(lo, min(v, hi));
 }
 
 // Resolve the INI path to "<exe dir>\WinNumTip.ini". Falls back to a bare file name
@@ -116,7 +117,10 @@ void Load() {
     const int legacyTipPercent = ReadPercent(kLegacyKeyTipSize, 0);
     g_tipPercent = ReadPercent(kKeyTipSize, legacyTipPercent);
     g_opacityPercent = ReadPercent(kKeyOpacity, kDefaultOpacityPercent, kMinOpacityPercent, kMaxOpacityPercent);
-    g_invert       = ReadBool(kKeyInvert, false);
+    g_flags.invertColors = ReadBool(kKeyInvert, false);
+    g_flags.hideBorder    = ReadBool(kKeyHideBorder, false);
+    g_flags.hideSeparator = ReadBool(kKeyHideSeparator, false);
+    g_flags.compact       = ReadBool(kKeyCompactView, false);
     g_refreshMs    = ReadPercent(kKeyRefreshMs, kDefaultRefreshMs, kMinRefreshMs, kMaxRefreshMs);
     g_pollMs       = ReadPercent(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
 
@@ -153,13 +157,16 @@ void SetOpacityPercent(int percent) {
     WriteInt(kKeyOpacity, g_opacityPercent);
 }
 
-bool InvertColors() {
-    return g_invert;
+const RenderFlags& Flags() {
+    return g_flags;
 }
 
-void SetInvertColors(bool invert) {
-    g_invert = invert;
-    WriteBool(kKeyInvert, invert);
+void SetFlags(const RenderFlags& flags) {
+    g_flags = flags;
+    WriteBool(kKeyInvert, flags.invertColors);
+    WriteBool(kKeyHideBorder, flags.hideBorder);
+    WriteBool(kKeyHideSeparator, flags.hideSeparator);
+    WriteBool(kKeyCompactView, flags.compact);
 }
 
 bool FontIsSet() {

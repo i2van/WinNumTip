@@ -22,10 +22,12 @@ HFONT    g_font;
 bool     g_ownFont;    // true when g_font must be DeleteObject'd (not a stock font)
 HTHEME   g_theme;
 HBRUSH   g_lineBrush;  // solid brush that paints the separator lines
+HBRUSH   g_borderBrush;  // solid brush, fixed to the system window-frame color, that paints the outer border
 HBRUSH   g_bgBrush;    // solid strip-fill brush, only in invert-colors mode
-bool     g_invert;     // true when the strip/number colors are swapped
+Preferences::RenderFlags g_flags;  // cached; mirrors Preferences::Flags() for this show
 int      g_bgPart = TBP_BACKGROUNDBOTTOM;  // taskbar background part for the docked edge
 COLORREF g_textColor;  // resolved from the theme / system colors in Show
+COLORREF g_barColor;   // sampled themed bar color; flat fallback fill for "hide border"
 bool     g_active;     // true between Show (Win down) and Hide (Win up)
 
 // Retained so the refresh timer can rebuild the bar in place when the taskbar's
@@ -33,8 +35,12 @@ bool     g_active;     // true between Show (Win down) and Hide (Win up)
 // area, which removes its button and would otherwise leave an orphaned number behind).
 IUIAutomation* g_uia;
 HINSTANCE      g_inst;
-int            g_snapN;  // button count captured when the bar was built
+int            g_snapN;  // button count captured when the bar was built; also the number
+                          // of valid entries in g_snap and g_tipRect below
 RECT           g_snap[kMaxTips];              // button rects captured when the bar was built
+RECT           g_tipRect[kMaxTips];  // each tip's own digit square (see ApplyStripRegion),
+                                     // cached so PaintBorder can frame each one
+                                     // individually in "compact" mode
 // Timer id for the persistent refresh timer; its interval is the user's "refresh interval"
 // preference (Preferences::RefreshIntervalMs), re-applied on each Show or Apply.
 constexpr UINT_PTR kRefreshTimer = 1;
@@ -66,6 +72,7 @@ void FreeResources() {
     g_font = nullptr;
     g_ownFont = false;
     WinAPI::GdiObject::Delete(g_lineBrush);
+    WinAPI::GdiObject::Delete(g_borderBrush);
     WinAPI::GdiObject::Delete(g_bgBrush);
 }
 
@@ -84,16 +91,72 @@ void ComputeStripBounds(const RECT& tr, UINT edge, UINT dpi,
 }
 
 
+// Fill one rect's four edges, each 'w' thick, with the border brush -- the shared
+// drawing step behind both the whole-strip border and, in "compact" mode, each tip's
+// own individual one below.
+void PaintFrame(HDC hdc, const RECT& r, int w) {
+    RECT edge;
+    edge = {.left = r.left,      .top = r.top,        .right = r.right,     .bottom = r.top + w   }; FillRect(hdc, &edge, g_borderBrush);
+    edge = {.left = r.left,      .top = r.bottom - w,  .right = r.right,     .bottom = r.bottom    }; FillRect(hdc, &edge, g_borderBrush);
+    edge = {.left = r.left,      .top = r.top,         .right = r.left + w,  .bottom = r.bottom    }; FillRect(hdc, &edge, g_borderBrush);
+    edge = {.left = r.right - w, .top = r.top,         .right = r.right,     .bottom = r.bottom    }; FillRect(hdc, &edge, g_borderBrush);
+}
+
+// Paint a border, fixed to the system window-frame color (see g_borderBrush) rather than
+// the separator's theme-derived color, so it reads as a normal window border regardless
+// of the sampled taskbar theme, as four filled edge strips (rather than FrameRect, which
+// cannot be widened). Its thickness comes from the system border metric, same as a
+// separator's, so it scales with DPI. In "compact" mode this frames each tip's own digit
+// square (g_tipRect, cached by ApplyStripRegion) individually rather than the whole strip
+// as one shared frame -- the square is already the entirety of what the window's own
+// region shows for that tip (see ApplyStripRegion), so the frame's outer edge lines up
+// exactly with the region's own edge there and nothing further out is needed; every tip
+// reads as its own small bordered box, with the gap between the window region's tips
+// (formerly a separator's job) now serving as the visual divider, which is why "compact"
+// forces "hide separator" on instead (see ReadFlags): a dedicated divider would be
+// redundant. Otherwise (not "compact") frames 'rc', the whole strip, as a single rect,
+// drawn over whatever PaintBackground just filled.
+void PaintBorder(HWND hwnd, HDC hdc, const RECT& rc) {
+    if (!g_borderBrush) return;
+
+    const int w = max(1, GetSystemMetricsForDpi(SM_CXBORDER, WinAPI::Window::GetDpi(hwnd)));
+    if (g_flags.compact) {
+        for (int i = 0; i < g_snapN; ++i) PaintFrame(hdc, g_tipRect[i], w);
+    } else {
+        PaintFrame(hdc, rc, w);
+    }
+}
+
 // Paint the bar background: in invert-colors mode a solid fill with the number color;
-// otherwise the taskbar theme (falling back to the 3D face color when the theme is
-// unavailable, e.g. classic mode). Used from both WM_ERASEBKGND and WM_PRINTCLIENT so
-// DrawThemeParentBackground can show it behind the tips.
+// otherwise the taskbar theme -- as a flat fill of the sampled bar color instead of the
+// theme drawing itself when "hide border" is set (see the flat-fill branch below), or
+// falling back to the 3D face color when the theme is unavailable, e.g. classic mode.
+// Then the border on top, unless "hide border" is set. Painted the same way regardless of
+// "compact": that flag shrinks the window's own region (see ApplyStripRegion) down
+// to the border, the separators and a small square around each digit instead of changing
+// what is drawn here, so only those pieces of this same fill end up on screen and the
+// rest of the strip is simply not part of the window. Used from both WM_ERASEBKGND and
+// WM_PRINTCLIENT so DrawThemeParentBackground can show it behind the tips.
 void PaintBackground(HWND hwnd, HDC hdc) {
     RECT rc;
     GetClientRect(hwnd, &rc);
-    if (g_invert && g_bgBrush) FillRect(hdc, &rc, g_bgBrush);
-    else if (g_theme)          DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
-    else                       FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1));
+    if (g_flags.invertColors && g_bgBrush) {
+        FillRect(hdc, &rc, g_bgBrush);
+    } else if (g_theme && g_flags.hideBorder) {
+        // DrawThemeBackground stretches the visual style's own edge/highlight to fit our
+        // slim strip, which leaves a residual line right where the border would be even
+        // with it suppressed; a flat fill with the already-sampled bar color avoids that
+        // baked-in artifact instead of trying to paint over it.
+        const HBRUSH bar = CreateSolidBrush(g_barColor);
+        FillRect(hdc, &rc, bar);
+        DeleteObject(bar);
+    } else if (g_theme) {
+        DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
+    } else {
+        FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1));
+    }
+
+    if (!g_flags.hideBorder) PaintBorder(hwnd, hdc, rc);
 }
 
 // WM_ERASEBKGND / WM_PRINTCLIENT: paint the themed bar background.
@@ -160,10 +223,14 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         0, 0, 10, 10, nullptr, nullptr, inst, nullptr);
 }
 
-// Apply the "opacity" preference to the overlay window as a whole-window alpha blend
+// Apply the "opacity" preference to the overlay window as a constant alpha blend
 // (WS_EX_LAYERED + LWA_ALPHA covers the window and its child tip/separator statics
-// together, so no per-child changes are needed). No-op while the window doesn't exist.
-void ApplyOpacityPreference() {
+// together, so no per-child changes are needed). "Compact view" is handled separately,
+// by shrinking the window's own region (see ApplyStripRegion in Refresh) rather than a
+// layered-window color key. Reads Preferences directly rather than the Refresh-cached
+// flags, since both call sites (Show, ApplyPreferences) run this before Refresh
+// repopulates them. No-op while the window doesn't exist.
+void ApplyLayeredAttributes() {
     if (!g_overlay) return;
     const BYTE alpha = static_cast<BYTE>(MulDiv(255, Preferences::OpacityPercent(), 100));
     VERIFY(SetLayeredWindowAttributes(g_overlay, 0, alpha, LWA_ALPHA));
@@ -285,7 +352,7 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     }
     // Re-arm each session (the window and its timer persist across sessions) so a changed
     // refresh-interval preference takes effect on the next Win-press.
-    ApplyOpacityPreference();
+    ApplyLayeredAttributes();
     ArmRefreshTimer();
     g_active = true;
     Refresh();
@@ -293,7 +360,7 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
 
 void ApplyPreferences() {
     if (!g_active || !g_overlay) return;
-    ApplyOpacityPreference();
+    ApplyLayeredAttributes();
     ArmRefreshTimer();
     Refresh();
 }
@@ -333,6 +400,195 @@ void ApplyEmpty() {
     g_snapN = 0;
 }
 
+// Measure tip 'i's actual digit glyph (the same character the tip loop below draws) at
+// whatever font is currently selected into 'hdc' -- the shared tip font (g_font), which
+// already carries any custom weight/italic/underline/strikeout from Preferences (see
+// Refresh), and 'tm' is that same font's metrics (GetTextMetrics), fetched once by the
+// caller since they are identical for every digit.
+//
+// Horizontally: GetTextExtentPoint32 reports the advance box at the font's real size and
+// weight. An italic or otherwise slanted face paints past that box's left/right edges,
+// so GetCharABCWidths' negative A/C bearings report how far the ink reaches beyond it on
+// each side -- the same technique FontPreview.cpp uses for its own digits run. 'shiftX'
+// is half that left/right imbalance: SS_CENTER centers the advance box, not the ink, so
+// a slanted glyph's true ink center sits off that box's midpoint by this much. Bearings
+// stay zero for a bitmap face -- it has no such overhang and folds its own slant into
+// extent.cx already -- since GetCharABCWidths only serves TrueType.
+//
+// Vertically, there is no advance-box equivalent to lean on: tmAscent/tmDescent are the
+// font's whole cell, sized to also fit accents above capitals and descenders below the
+// baseline that digits never use, so even an upright digit can sit well short of the
+// cell's top while touching its bottom (true for Segoe UI, for one) -- SS_CENTERIMAGE
+// centers that lopsided cell, not the ink within it, leaving a bigger gap above the
+// glyph than below. GetGlyphOutline's GLYPHMETRICS gives the glyph's true black-box
+// height (gmBlackBoxY) and its top-left corner relative to the baseline
+// (gmptGlyphOrigin, positive upward), which is what lets that lopsidedness be measured,
+// via the same gap-imbalance idea as 'shiftX', as 'shiftY'.
+void MeasureDigitInk(HDC hdc, const TEXTMETRIC& tm, int i, int& inkW, int& inkH, int& shiftX, int& shiftY) {
+    inkW = inkH = shiftX = shiftY = 0;
+    const TCHAR c = i < kMaxTips - 1 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
+    SIZE extent = { 0, 0 };
+    const bool measured = GetTextExtentPoint32(hdc, &c, 1, &extent);
+    ASSERT(measured);
+    if (!measured) return;
+
+    int leftBearing = 0, rightBearing = 0;
+    ABC abc;
+    if (GetCharABCWidths(hdc, c, c, &abc)) {
+        if (abc.abcA < 0) leftBearing  = -abc.abcA;
+        if (abc.abcC < 0) rightBearing = -abc.abcC;
+    }
+    inkW   = leftBearing + extent.cx + rightBearing;
+    shiftX = (rightBearing - leftBearing) / 2;
+
+    GLYPHMETRICS gm;
+    MAT2 identity = {};
+    identity.eM11.value = 1;
+    identity.eM22.value = 1;
+    if (GetGlyphOutline(hdc, c, GGO_METRICS, &gm, 0, nullptr, &identity) != GDI_ERROR) {
+        inkH = gm.gmBlackBoxY;
+        const int topGap    = tm.tmAscent  - gm.gmptGlyphOrigin.y;
+        const int bottomGap = tm.tmDescent - (static_cast<int>(gm.gmBlackBoxY) - gm.gmptGlyphOrigin.y);
+        shiftY = (topGap - bottomGap) / 2;
+    } else {
+        inkH = extent.cy;   // fall back to the padded cell height; still caps side below
+    }
+}
+
+// Add one rectangle to the current path as an explicit 4-point polygon rather than via
+// Rectangle(hdc, ...): GDI's Rectangle collapses to an empty path element whenever the
+// rect is exactly 1 pixel thin along either axis -- confirmed with an offscreen
+// BeginPath/Rectangle/PathToRegion/PtInRegion repro, where a lone 1-pixel-tall
+// Rectangle() produced a NULLREGION regardless of pen (even NULL_PEN). 1 device pixel
+// is exactly the border/separator thickness (SM_CXBORDER) at 100% DPI, which is why the
+// per-tip border below vanished from the window's region entirely -- clipped away, not
+// just painted with the wrong color -- instead of merely looking thin. Polygon has no
+// such collapse, so it is used for every rect added to the path below, not just the
+// thin ones, for consistency.
+void PathRect(HDC hdc, int left, int top, int right, int bottom) {
+    const POINT pts[4] = {
+        { left,  top    },
+        { right, top    },
+        { right, bottom },
+        { left,  bottom },
+    };
+    Polygon(hdc, pts, 4);
+}
+
+// Shape the overlay window itself for the "compact" flag, instead of painting a
+// transparent fill: restrict the window's region to just the separators (the same rects
+// the separator AddStatic calls use) and one square centered on each digit (also cached
+// per tip into g_tipRect so PaintBorder can frame it individually -- the square is the
+// entire per-tip region here, so a frame around it needs no rect of its own). A square's
+// side is its actual measured ink extent (see MeasureDigitInk)
+// padded on all sides by the same system margin used below to inset from the strip's own
+// edges, so the glyph gets some breathing room rather than the square hugging its exact
+// ink bounds -- capped by the tip cell's along-strip extent and by its cross extent
+// shrunk by that same margin (insetX/insetY, the same the separators are already inset
+// by) on both ends, so the padded square still never reaches past the cell or the
+// border/edge either. Its center is nudged by the glyph's own bearing imbalance (shiftX
+// horizontally, shiftY vertically) so it follows the ink rather than the box
+// SS_CENTER/SS_CENTERIMAGE actually center, staying accurate for a bold, italic or
+// otherwise lopsided custom font alike -- this keeps the ink's own top/bottom (and
+// left/right) margins equal within the square, since shiftY/shiftX are derived directly
+// from the glyph's measured gaps rather than any fixed or font-family-specific guess.
+// Everything outside these shapes is simply not
+// part of the window, letting whatever is behind show through with no color key and no
+// antialiasing halo to work around. Restores the default whole-rectangle region when the
+// flag is off. 'ov' and 'btn' are the same screen-coordinate rects Refresh just used to
+// place the tips and separators; hwnd is always g_overlay.
+void ApplyStripRegion(HWND hwnd, const RECT& ov, const RECT* btn, int n, bool vertical) {
+    if (!g_flags.compact) {
+        SetWindowRgn(hwnd, nullptr, FALSE);
+        return;
+    }
+
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    const int OW = rc.right;
+    const int OH = rc.bottom;
+    const UINT dpi   = WinAPI::Window::GetDpi(hwnd);
+    const int lineW  = max(1, GetSystemMetricsForDpi(SM_CXBORDER, dpi));
+    const int insetX = GetSystemMetricsForDpi(SM_CXFIXEDFRAME, dpi);
+    const int insetY = GetSystemMetricsForDpi(SM_CYFIXEDFRAME, dpi);
+
+    const HDC hdc = GetDC(hwnd);
+    const HGDIOBJ prevFont = SelectObject(hdc, g_font);
+    const bool fontSelected = prevFont && prevFont != HGDI_ERROR;
+    ASSERT(fontSelected);
+
+    // tm is shared by every digit (see MeasureDigitInk), so it is fetched once here
+    // rather than once per digit.
+    TEXTMETRIC tm;
+    const bool gotMetrics = fontSelected && GetTextMetrics(hdc, &tm);
+    ASSERT(!fontSelected || gotMetrics);
+
+    // Measured up front, before the path bracket opens below, so BeginPath only ever
+    // captures the actual outline-producing calls (PathRect), not these text-metric
+    // queries.
+    int inkW[kMaxTips], inkH[kMaxTips], shiftX[kMaxTips], shiftY[kMaxTips];
+    for (int i = 0; i < n; ++i) {
+        if (gotMetrics) MeasureDigitInk(hdc, tm, i, inkW[i], inkH[i], shiftX[i], shiftY[i]);
+        else inkW[i] = inkH[i] = shiftX[i] = shiftY[i] = 0;
+    }
+
+    VERIFY(BeginPath(hdc));
+    // WINDING (rather than the default ALTERNATE) so touching or overlapping rectangles
+    // union together instead of XOR-cancelling where they meet.
+    SetPolyFillMode(hdc, WINDING);
+
+    if (!g_flags.hideSeparator) {
+        for (int i = 0; i + 1 < n; ++i) {
+            if (vertical) {
+                const int boundary = (btn[i].bottom + btn[i + 1].top) / 2 - ov.top;
+                PathRect(hdc, insetX, boundary - lineW / 2, OW - insetX, boundary - lineW / 2 + lineW);
+            } else {
+                const int boundary = (btn[i].right + btn[i + 1].left) / 2 - ov.left;
+                PathRect(hdc, boundary - lineW / 2, insetY, boundary - lineW / 2 + lineW, OH - insetY);
+            }
+        }
+    }
+
+    for (int i = 0; i < n; ++i) {
+        // Each tip's own cell, full-width (vertical) or full-height (horizontal) -- the
+        // same bounds Refresh gave its AddStatic call, used below only to center the
+        // digit square within it.
+        const int x = vertical ? 0 : btn[i].left - ov.left;
+        const int y = vertical ? btn[i].top - ov.top : 0;
+        const int w = vertical ? OW : btn[i].right - btn[i].left;
+        const int h = vertical ? btn[i].bottom - btn[i].top : OH;
+
+        // Padded so the square gives the glyph some breathing room instead of hugging
+        // its exact ink bounds -- the same system margin used to inset from the strip's
+        // own edges, applied here on all four sides of the ink. Padding is only added
+        // once measurement has confirmed there is real ink to pad; a failed measurement
+        // (rawInk 0) still falls through to the plain geometric cap below.
+        const int rawInk = max(inkW[i], inkH[i]);
+        const int pad = vertical ? insetX : insetY;
+        const int ink = rawInk > 0 ? rawInk + 2 * pad : 0;
+        const int cap  = vertical ? min(OW - 2 * insetX, h) : min(w, OH - 2 * insetY);
+        const int side = ink > 0 ? min(cap, ink) : cap;
+        const int left = vertical ? (OW - side) / 2 + shiftX[i] : x + (w - side) / 2 + shiftX[i];
+        const int top  = vertical ? y + (h - side) / 2 + shiftY[i] : (OH - side) / 2 + shiftY[i];
+        // Cached so PaintBorder can frame exactly this square in "compact" mode -- the
+        // square is this tip's whole region here, so its own outer edge doubles as the
+        // border frame's outer edge; no separate, larger border rect is added to the
+        // path below.
+        g_tipRect[i] = {.left = left, .top = top, .right = left + side, .bottom = top + side};
+        PathRect(hdc, left, top, left + side, top + side);
+    }
+
+    VERIFY(EndPath(hdc));
+    const HRGN rgn = PathToRegion(hdc);
+    if (fontSelected) VERIFY(SelectObject(hdc, prevFont));
+    ReleaseDC(hwnd, hdc);
+    ASSERT(rgn);
+
+    const BOOL applied = SetWindowRgn(hwnd, rgn, FALSE);
+    ASSERT(applied);
+    if (!applied) VERIFY(DeleteObject(rgn));   // ownership only transfers to the OS on success
+}
+
 // Rebuild the bar's contents in place for the current taskbar state. The window
 // already exists (created by Show); on every refresh its child controls and per-show
 // resources are swapped with painting suspended, so numbers realign without flicker.
@@ -359,12 +615,10 @@ void Refresh() {
     bool vertical;
     ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
 
-    int p = Preferences::TipSizePercent();
-    if (p < Preferences::kMinPercent) p = Preferences::kMinPercent;
-    else if (p > Preferences::kMaxPercent) p = Preferences::kMaxPercent;
+    const int tipPercent = Preferences::TipSizePercent();
+    const int p = max(Preferences::kMinPercent, min(tipPercent, Preferences::kMaxPercent));
     int thick = MulDiv(btnThick, p, Preferences::kMaxPercent);
-    if (thick < defThick) thick = defThick;
-    else if (thick > btnThick) thick = btnThick;
+    thick = max(defThick, min(thick, btnThick));
 
     const int BH = vertical ? 0 : thick;
     const int BW = vertical ? thick : 0;
@@ -377,8 +631,8 @@ void Refresh() {
     for (int i = 1; i < n; ++i) {
         const int a = vertical ? btn[i].top    : btn[i].left;
         const int b = vertical ? btn[i].bottom : btn[i].right;
-        if (a < lo) lo = a;
-        if (b > hi) hi = b;
+        lo = min(lo, a);
+        hi = max(hi, b);
     }
 
     RECT ov;
@@ -404,15 +658,20 @@ void Refresh() {
     g_theme = OpenThemeData(g_overlay, TEXT("TaskBar"));
     const COLORREF barColor  = SampleBarColor(g_theme, g_bgPart, OW, OH);
     const COLORREF textColor = PickTextColor(g_theme, g_bgPart, barColor);
+    g_barColor = barColor;   // cached: PaintBackground's flat-fill fallback for "hide border"
+
+    // Cache the current rendering toggles (see RenderFlags) for this build of the bar --
+    // used throughout the rest of Refresh and by PaintBackground/PaintBorder.
+    g_flags = Preferences::Flags();
 
     // Invert-colors mode swaps the roles of the bar and number colors: the strip is
     // filled solid with the number (text) color and the numbers are drawn in the bar
     // color, giving a highlighted look. The fill is cached in a brush for PaintBackground;
     // in normal mode the themed taskbar background is painted instead.
-    g_invert = Preferences::InvertColors();
-    if (g_invert) {
+    if (g_flags.invertColors) {
         g_textColor = barColor != CLR_INVALID ? barColor : GetSysColor(COLOR_3DFACE);
         g_bgBrush   = CreateSolidBrush(textColor);
+        ASSERT(g_bgBrush);
     } else {
         g_textColor = textColor;
     }
@@ -437,10 +696,10 @@ void Refresh() {
             int cross = vertical ? (btn[0].bottom - btn[0].top) : (btn[0].right - btn[0].left);
             for (int i = 1; i < n; ++i) {
                 const int c = vertical ? (btn[i].bottom - btn[i].top) : (btn[i].right - btn[i].left);
-                if (c > 0 && c < cross) cross = c;
+                if (c > 0) cross = min(cross, c);
             }
-            if (cross > 0 && scaled > cross) scaled = cross;
-            if (scaled < 1) scaled = 1;
+            if (cross > 0) scaled = min(scaled, cross);
+            scaled = max(scaled, 1);
             lf->lfHeight = lf->lfHeight < 0 ? -scaled : scaled;
         }
         if (Preferences::FontIsSet()) {
@@ -463,15 +722,25 @@ void Refresh() {
     }
 
     // Pass 1: a centered number tip per taskbar button (tips span the full button
-    // width and meet at the boundaries). Pass 2: a separator line on each boundary,
-    // created last so it sits on top of the tips' Z-order and is not occluded. Each
-    // separator is a plain STATIC filled with the solid line brush (via
-    // WM_CTLCOLORSTATIC): a neutral divider midway between the text and bar colors so
-    // it is clearly visible yet softer than the numbers. Its thickness comes from the
-    // system border metric and it is inset from the bar ends by the fixed window-frame
-    // metric, so both scale with DPI. The midpoint uses the true text/bar colors, so it
-    // stays balanced whether or not the colors are inverted.
-    g_lineBrush = CreateSolidBrush(PickSeparatorColor(textColor, barColor));
+    // width and meet at the boundaries). Pass 2: unless the "hide separator" flag is set,
+    // a separator line on each boundary, created last so it sits on top of the tips'
+    // Z-order and is not occluded. Each separator is a plain STATIC filled with the solid
+    // line brush (via WM_CTLCOLORSTATIC): a neutral divider midway between the text and
+    // bar colors so it is clearly visible yet softer than the numbers. Its thickness
+    // comes from the system border metric and it is inset from the bar ends by the fixed
+    // window-frame metric, so both scale with DPI. The midpoint uses the true text/bar
+    // colors, so it stays balanced whether or not the colors are inverted. The outer
+    // border uses its own brush (g_borderBrush), fixed to the system window-frame color
+    // regardless of the theme, so it stays a normal-looking border unlike the separators;
+    // in "compact" mode PaintBorder frames each tip's own digit square with it instead of
+    // the whole strip, using the bounds ApplyStripRegion caches into g_tipRect.
+    // Tips keep this same full-button geometry in "compact" mode too -- only a
+    // small square of each ends up visible, via the window region ApplyStripRegion sets
+    // up below, not by resizing the controls themselves.
+    g_lineBrush   = CreateSolidBrush(PickSeparatorColor(textColor, barColor));
+    g_borderBrush = CreateSolidBrush(GetSysColor(COLOR_WINDOWFRAME));
+    ASSERT(g_lineBrush);
+    ASSERT(g_borderBrush);
     const int lineW  = max(1, GetSystemMetricsForDpi(SM_CXBORDER, dpi));
     const int insetX = GetSystemMetricsForDpi(SM_CXFIXEDFRAME, dpi);
     const int insetY = GetSystemMetricsForDpi(SM_CYFIXEDFRAME, dpi);
@@ -491,17 +760,25 @@ void Refresh() {
         }
     }
 
-    for (int i = 0; i + 1 < n; ++i) {
-        if (vertical) {
-            const int boundary = (btn[i].bottom + btn[i + 1].top) / 2 - ov.top;
-            AddStatic(g_overlay, g_inst, 0, TEXT(""),
-                      insetX, boundary - lineW / 2, OW - 2 * insetX, lineW, kSepId);
-        } else {
-            const int boundary = (btn[i].right + btn[i + 1].left) / 2 - ov.left;
-            AddStatic(g_overlay, g_inst, 0, TEXT(""),
-                      boundary - lineW / 2, insetY, lineW, OH - 2 * insetY, kSepId);
+    if (!g_flags.hideSeparator) {
+        for (int i = 0; i + 1 < n; ++i) {
+            if (vertical) {
+                const int boundary = (btn[i].bottom + btn[i + 1].top) / 2 - ov.top;
+                AddStatic(g_overlay, g_inst, 0, TEXT(""),
+                          insetX, boundary - lineW / 2, OW - 2 * insetX, lineW, kSepId);
+            } else {
+                const int boundary = (btn[i].right + btn[i + 1].left) / 2 - ov.left;
+                AddStatic(g_overlay, g_inst, 0, TEXT(""),
+                          boundary - lineW / 2, insetY, lineW, OH - 2 * insetY, kSepId);
+            }
         }
     }
+
+    // Shrink the window's own region down to the border, the separators and a square
+    // around each digit when "compact" is set, or restore the default whole-
+    // rectangle region otherwise. Placed here, alongside the tips/separators whose
+    // geometry it mirrors, rather than because it depends on them being created first.
+    ApplyStripRegion(g_overlay, ov, btn, n, vertical);
 
     // Re-enable painting, make sure the window is visible (it may have been hidden
     // during an empty period) and topmost, then repaint the whole bar once. Batching
