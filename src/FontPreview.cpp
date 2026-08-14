@@ -220,6 +220,18 @@ void OnNcDestroy(HWND preview) {
     FORWARD_WM_NCDESTROY(preview, DefSubclassProc);
 }
 
+// WM_SETCURSOR: the static control class carries its own arrow class cursor, so letting the
+// message fall through to DefSubclassProc (which forwards to that class handling) would show
+// the arrow regardless of what the parent dialog wants -- it never even reaches the parent, as
+// a class cursor means the control's own default processing consumes WM_SETCURSOR outright
+// rather than bubbling it up. Intercepting it here, ahead of that default processing, is what
+// lets a hand cursor hint that the preview is clickable just like the Select... button beside
+// it (see PreferencesDialog's OnCommand STN_CLICKED handling).
+BOOL OnSetCursor(HWND /*hwnd*/, HWND /*hwndCursor*/, UINT /*codeHitTest*/, UINT /*msg*/) {
+    SetCursor(LoadCursor(nullptr, IDC_HAND));
+    return TRUE;
+}
+
 // Take over the static's rendering: OnPaint fills the whole client area, so the default erase
 // is suppressed to keep the two-font line from flickering on every repaint.
 LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
@@ -227,6 +239,7 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
     switch (msg) {
         HANDLE_MSG(hwnd, WM_PAINT, OnPaint);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnNcDestroy);
+        HANDLE_MSG(hwnd, WM_SETCURSOR, OnSetCursor);
         case WM_ERASEBKGND: return TRUE;
     }
 

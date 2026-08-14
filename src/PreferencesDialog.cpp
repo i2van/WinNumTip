@@ -200,6 +200,12 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
             NotifyApplied(dlg);
             break;
         }
+        // The font preview is clickable too (FontPreview shows a hand cursor over it as the
+        // hint): a click (STN_CLICKED, from the SS_NOTIFY style) opens the same font picker as
+        // the Select... button beside it.
+        case IDC_FONT_NAME:
+            if (notify != STN_CLICKED) break;
+            [[fallthrough]];
         case IDC_FONT_BUTTON:
             FontPicker::Open(dlg);
             UpdateApplyState(dlg);
