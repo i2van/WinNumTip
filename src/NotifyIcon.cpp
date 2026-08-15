@@ -36,6 +36,7 @@ void Add(HINSTANCE inst, HWND msgWnd) {
     g_nid.hIcon = WinAPI::Icon::Load(inst, IDI_APPICON, SM_CXSMICON, SM_CYSMICON, LR_DEFAULTCOLOR);
     if (g_nid.hIcon) g_ownedIcon = g_nid.hIcon;
     else             g_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    ASSERT(g_nid.hIcon);
 
     WinAPI::String::Load(inst, IDS_TOOLTIP, g_nid.szTip);
 
@@ -73,6 +74,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
     const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_NOTIFYICONMENU));
     if (!menu) return;
     const HMENU sub = GetSubMenu(menu, 0);
+    ASSERT(sub);
     VERIFY(SetMenuDefaultItem(sub, IDM_PREFERENCES, FALSE));
     POINT pt;
     VERIFY(GetCursorPos(&pt));

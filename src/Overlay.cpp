@@ -139,7 +139,7 @@ void PaintBorder(HWND hwnd, HDC hdc, const RECT& rc) {
 // WM_PRINTCLIENT so DrawThemeParentBackground can show it behind the tips.
 void PaintBackground(HWND hwnd, HDC hdc) {
     RECT rc;
-    GetClientRect(hwnd, &rc);
+    VERIFY(GetClientRect(hwnd, &rc));
     if (g_flags.invertColors && g_bgBrush) {
         FillRect(hdc, &rc, g_bgBrush);
     } else if (g_theme && g_flags.hideBorder) {
@@ -148,8 +148,11 @@ void PaintBackground(HWND hwnd, HDC hdc) {
         // with it suppressed; a flat fill with the already-sampled bar color avoids that
         // baked-in artifact instead of trying to paint over it.
         const HBRUSH bar = CreateSolidBrush(g_barColor);
-        FillRect(hdc, &rc, bar);
-        DeleteObject(bar);
+        ASSERT(bar);
+        if (bar) {
+            VERIFY(FillRect(hdc, &rc, bar));
+            VERIFY(DeleteObject(bar));
+        }
     } else if (g_theme) {
         DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
     } else {
@@ -256,17 +259,38 @@ void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
 // separator color.
 [[nodiscard]] COLORREF SampleBarColor(HTHEME theme, int part, int w, int h) {
     if (!theme || w <= 0 || h <= 0) return CLR_INVALID;
+
     const HDC screen = GetDC(nullptr);
+    ASSERT(screen);
+    if (!screen) return CLR_INVALID;
+
     const HDC mem = CreateCompatibleDC(screen);
+    ASSERT(mem);
+    if (!mem) { VERIFY(ReleaseDC(nullptr, screen) == 1); return CLR_INVALID; }
+
     const HBITMAP bmp = CreateCompatibleBitmap(screen, w, h);
+    ASSERT(bmp);
+    if (!bmp) {
+        VERIFY(DeleteDC(mem));
+        VERIFY(ReleaseDC(nullptr, screen) == 1);
+        return CLR_INVALID;
+    }
+
     const HGDIOBJ old = SelectObject(mem, bmp);
-    const RECT rc = { 0, 0, w, h };
-    DrawThemeBackground(theme, mem, part, 0, &rc, nullptr);
-    const COLORREF c = GetPixel(mem, w / 2, h / 2);
-    SelectObject(mem, old);
-    DeleteObject(bmp);
-    DeleteDC(mem);
-    ReleaseDC(nullptr, screen);
+    const bool selected = old && old != HGDI_ERROR;
+    ASSERT(selected);
+
+    COLORREF c = CLR_INVALID;
+    if (selected) {
+        const RECT rc = { 0, 0, w, h };
+        DrawThemeBackground(theme, mem, part, 0, &rc, nullptr);
+        c = GetPixel(mem, w / 2, h / 2);
+        VERIFY(SelectObject(mem, old));
+    }
+
+    VERIFY(DeleteObject(bmp));
+    VERIFY(DeleteDC(mem));
+    VERIFY(ReleaseDC(nullptr, screen) == 1);
 
     return c;
 }
@@ -504,7 +528,7 @@ void ApplyStripRegion(HWND hwnd, const RECT& ov, const RECT* btn, int n, bool ve
     }
 
     RECT rc;
-    GetClientRect(hwnd, &rc);
+    VERIFY(GetClientRect(hwnd, &rc));
     const int OW = rc.right;
     const int OH = rc.bottom;
     const UINT dpi   = WinAPI::Window::GetDpi(hwnd);
@@ -513,6 +537,7 @@ void ApplyStripRegion(HWND hwnd, const RECT& ov, const RECT* btn, int n, bool ve
     const int insetY = GetSystemMetricsForDpi(SM_CYFIXEDFRAME, dpi);
 
     const HDC hdc = GetDC(hwnd);
+    ASSERT(hdc);
     const HGDIOBJ prevFont = SelectObject(hdc, g_font);
     const bool fontSelected = prevFont && prevFont != HGDI_ERROR;
     ASSERT(fontSelected);
@@ -581,7 +606,7 @@ void ApplyStripRegion(HWND hwnd, const RECT& ov, const RECT* btn, int n, bool ve
     VERIFY(EndPath(hdc));
     const HRGN rgn = PathToRegion(hdc);
     if (fontSelected) VERIFY(SelectObject(hdc, prevFont));
-    ReleaseDC(hwnd, hdc);
+    VERIFY(ReleaseDC(hwnd, hdc) == 1);
     ASSERT(rgn);
 
     const BOOL applied = SetWindowRgn(hwnd, rgn, FALSE);

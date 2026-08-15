@@ -21,7 +21,9 @@ HFONT g_boldFont;
 // resource (editable there); only the build-supplied value is substituted here.
 void FormatDlgItemText(HWND dlg, int id, LPCTSTR value) {
     TCHAR fmt[64];
-    if (GetDlgItemText(dlg, id, fmt, ARRAYSIZE(fmt))) {
+    const UINT gotFmt = GetDlgItemText(dlg, id, fmt, ARRAYSIZE(fmt));
+    ASSERT(gotFmt);
+    if (gotFmt) {
         TCHAR text[128];
         wsprintf(text, fmt, value);
         VERIFY(SetDlgItemText(dlg, id, text));
@@ -42,6 +44,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     if (WinAPI::Font::GetLogFont(GetWindowFont(dlg), lf)) {
         lf.lfWeight = FW_BOLD;
         g_boldFont = CreateFontIndirect(&lf);
+        ASSERT(g_boldFont);
         if (g_boldFont)
             SetWindowFont(GetDlgItem(dlg, IDC_ABOUT_NAME), g_boldFont, TRUE);
     }

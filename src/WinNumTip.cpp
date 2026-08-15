@@ -124,8 +124,10 @@ extern "C" void Entry() {
 
     // Enforce a single running instance via a named mutex (UUID-based name). The handle
     // is intentionally never closed: it must stay alive for the whole process lifetime,
-    // and the OS closes it automatically on exit, so there is nothing to leak.
-    CreateMutex(nullptr, TRUE, kMutexName);
+    // and the OS closes it automatically on exit, so there is nothing to leak. VERIFY
+    // still catches a genuine creation failure in Debug (distinct from the expected
+    // ERROR_ALREADY_EXISTS case below, which returns a valid handle).
+    VERIFY(CreateMutex(nullptr, TRUE, kMutexName));
     if (GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
 
     // Per-Monitor-V2 DPI awareness is declared in WinNumTip.manifest (applied at
