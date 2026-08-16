@@ -19,26 +19,25 @@ position - **WinNumTip** just reminds you which number is which.
 > but because keyboard hooks are also used by keyloggers, some antivirus tools **may** flag the app.
 >
 > **WinNumTip** reads **only** the `Win` key state
-> to toggle the overlay and **does not** record or transmit any keystrokes.
+> to toggle the strip and **does not** record or transmit any keystrokes.
 
 ## Features
 
 - Numbered tips over taskbar buttons while the `Win` key is held.
-- Works with the taskbar docked on any edge (bottom, top, left, right).
+- Works with the taskbar docked on any edge.
 - Adjustable tip size via the notification area icon's **Preferences** dialog - from the
   default slim strip up to the full taskbar-button size (tip height for a
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
-- The same dialog also offers a custom tip font (or the taskbar's own by default),
-  inverted colors, a compact view, independent border/separator hiding, adjustable tip
-  opacity, and tunable refresh/`Win` key poll intervals.
+- Adjustable tip font, inverted colors, compact view, independent border/separator hiding,
+  tip opacity and tunable refresh/`Win` key poll intervals.
 
 ## Preferences
 
-Double-click the notification area icon, right-click it and choose **Preferences...**, or click
+Double-click the notification area icon, right-click it and choose **Preferences...** or click
 **Preferences** in the **About** dialog to open the settings dialog.
 
 Settings are saved next to the app in `WinNumTip.ini`. Click **Apply** to save them
-without closing the dialog, or **OK** to save and close; applied settings take effect
+without closing the dialog or **OK** to save and close; applied settings take effect
 immediately.
 
 > [!TIP]
@@ -49,7 +48,7 @@ immediately.
 
 - **Tip size** - how thick the numbered strip is across the taskbar: its height on a
   horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
-  built-in strip) up to a full **Taskbar button** cell, and the numbers scale to match.
+  built-in strip) up to a full **Taskbar button** cell and the numbers scale to match.
 
   > `WinNumTip.ini` keys: `TipSizePercent`
 
@@ -70,7 +69,7 @@ immediately.
 
   > `WinNumTip.ini` keys: `CompactView`
 
-- **Hide border** - hides the strip's outer border, or (in **Compact view** mode) each tip's
+- **Hide border** - hides the strip's outer border or (in **Compact view** mode) each tip's
   own border individually. Off by default (border shown).
 
   > `WinNumTip.ini` keys: `HideBorder`
@@ -80,14 +79,14 @@ immediately.
 
   > `WinNumTip.ini` keys: `HideSeparator`
 
-- **Tip opacity** - how opaque the overlay window is, as a percentage. Range `10`-`100`%,
+- **Tip opacity** - how opaque the strip window is, as a percentage. Range `10`-`100`%,
   default `100`% (fully opaque).
 
   > `WinNumTip.ini` keys: `OpacityPercent`
 
 - **Tips refresh** - how often, in milliseconds, the numbered tips re-sync with the
   taskbar buttons while shown, so the numbers stay aligned when a button appears,
-  disappears, or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
+  disappears or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
   but polls more often.
 
   > `WinNumTip.ini` keys: `RefreshIntervalMs`
@@ -111,7 +110,7 @@ Sometimes numbered strip does not arrear, to fix that `Alt`+`Tab` couple of time
 
 ## How to build
 
-Open `WinNumTip.slnx` in Visual Studio and build, or from a developer prompt for `x64` build:
+Open `WinNumTip.slnx` in Visual Studio and build or from a developer prompt for `x64` build:
 
 ```powershell
 msbuild WinNumTip.slnx /t:Build /p:Configuration=Release /p:Platform=x64
