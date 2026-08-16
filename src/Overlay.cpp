@@ -209,12 +209,21 @@ void OnTimer(HWND /*hwnd*/, UINT id) {
     if (changed) Refresh();   // rebuilds the bar in place (no flicker); recovers from empty
 }
 
+// WM_MOUSEACTIVATE: the overlay is created with WS_EX_NOACTIVATE, but that alone does
+// not stop DefWindowProc's own default handling from activating the window (and
+// moving focus away from whatever had it) when it is clicked. Returning MA_NOACTIVATE
+// keeps a click on the strip from activating it or its owner at all.
+int OnMouseActivate(HWND /*hwnd*/, HWND /*hwndTopLevel*/, UINT /*codeHitTest*/, UINT /*msg*/) {
+    return MA_NOACTIVATE;
+}
+
 LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_ERASEBKGND,      OnEraseBkgnd);
         HANDLE_MSG(hwnd, WM_PRINTCLIENT,     OnPrintClient);
         HANDLE_MSG(hwnd, WM_CTLCOLORSTATIC,  OnCtlColorStatic);
         HANDLE_MSG(hwnd, WM_TIMER,           OnTimer);
+        HANDLE_MSG(hwnd, WM_MOUSEACTIVATE,   OnMouseActivate);
         default: return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 }
