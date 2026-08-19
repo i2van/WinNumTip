@@ -74,9 +74,6 @@
     <ClInclude Include="KeyboardHook.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Keyboard.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="About.h">
       <Filter>Header Files</Filter>
     </ClInclude>

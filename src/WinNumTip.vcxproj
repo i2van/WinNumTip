@@ -130,7 +130,6 @@
     <ClInclude Include="Overlay.h" />
     <ClInclude Include="NotifyIcon.h" />
     <ClInclude Include="KeyboardHook.h" />
-    <ClInclude Include="Keyboard.h" />
     <ClInclude Include="About.h" />
     <ClInclude Include="DialogIcon.h" />
     <ClInclude Include="Preferences.h" />

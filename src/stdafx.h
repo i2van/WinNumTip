@@ -127,7 +127,7 @@ namespace Dialog {
 // common dialog is modal -- otherwise 'dlg's last active popup, which resurfaces a child
 // dialog opened from 'dlg' (GetLastActivePopup returns 'dlg' itself when it owns no popups).
 inline void Foreground(HWND dlg, HWND top = nullptr) {
-    ::SetForegroundWindow(top ? top : GetLastActivePopup(dlg));
+    SetForegroundWindow(top ? top : GetLastActivePopup(dlg));
 }
 
 } // namespace Dialog
@@ -175,13 +175,28 @@ namespace OS {
         VER_SET_CONDITION(mask, VER_MINORVERSION, VER_EQUAL);
         VER_SET_CONDITION(mask, VER_BUILDNUMBER,  VER_LESS);
 
-        cached = ::VerifyVersionInfoW(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask) != FALSE
+        cached = VerifyVersionInfoW(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask) != FALSE
                      ? 1 : 0;
     }
     return cached != 0;
 }
 
 } // namespace OS
+
+namespace Keyboard {
+
+// IsWinDown(): true while either physical Windows key is currently held down. Used to gate the
+// overlay: the hook trusts it to distinguish a genuine Win release from the synthetic injected
+// up sent during Win+<key> chords, and the refresh timer polls it to self-heal when a Win
+// key-up is never delivered.
+[[nodiscard]] inline bool IsWinDown() {
+    // GetAsyncKeyState sets this high-order bit in its result while the key is physically down.
+    constexpr int kKeyDownBit = 0x8000;
+
+    return GetAsyncKeyState(VK_LWIN) & kKeyDownBit || GetAsyncKeyState(VK_RWIN) & kKeyDownBit;
+}
+
+} // namespace Keyboard
 
 namespace Process {
 
@@ -192,7 +207,7 @@ namespace Process {
 // ExitProcess is unreachable and kept only as the compiler-visible [[noreturn]] tail in case
 // TerminateProcess ever returns.
 [[noreturn]] inline void Terminate() {
-    ::TerminateProcess(GetCurrentProcess(), 0);
+    TerminateProcess(GetCurrentProcess(), 0);
     ExitProcess(0);
 }
 
@@ -207,7 +222,7 @@ namespace CommonControls {
     INITCOMMONCONTROLSEX icc;
     icc.dwSize = sizeof(icc);
     icc.dwICC  = classes;
-    return ::InitCommonControlsEx(&icc);
+    return InitCommonControlsEx(&icc);
 }
 
 } // namespace CommonControls
@@ -264,7 +279,7 @@ namespace Window {
 // window handle is no longer valid (the API then returns 0), so the result can be passed
 // straight to the *ForDpi APIs.
 [[nodiscard]] inline UINT GetDpi(HWND wnd) {
-    const UINT dpi = ::GetDpiForWindow(wnd);
+    const UINT dpi = GetDpiForWindow(wnd);
     return dpi ? dpi : USER_DEFAULT_SCREEN_DPI;
 }
 
@@ -275,7 +290,7 @@ namespace Window {
 inline void AllowSetForeground(HWND wnd) {
     DWORD process = 0;
     GetWindowThreadProcessId(wnd, &process);
-    if (process) ::AllowSetForegroundWindow(process);
+    if (process) AllowSetForegroundWindow(process);
 }
 
 // Enable(button, enabled): enable or disable a dialog push button (e.g. Apply), first moving
@@ -283,7 +298,7 @@ inline void AllowSetForeground(HWND wnd) {
 // disabled, so the dialog is never left with the focus on a dead control.
 inline void Enable(HWND button, bool enabled) {
     if (!enabled && GetFocus() == button) SetFocus(GetDlgItem(GetParent(button), IDOK));
-    ::EnableWindow(button, enabled ? TRUE : FALSE);
+    EnableWindow(button, enabled ? TRUE : FALSE);
 }
 
 // SetIcon(wnd, type, icon): give 'wnd' its ICON_BIG (Alt+Tab and the task switcher) or

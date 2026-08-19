@@ -53,6 +53,23 @@ void SetWorkingSelection(HWND dlg, const LOGFONT* selected) {
     UpdateFontPreview(dlg);
 }
 
+// Build the saved font preference over the fallback baseline (which carries the sensible
+// height/charset the preference itself does not store), reporting whether one is set at all.
+// Requires g_fallbackFont, so call only after SeedFallbackFont.
+bool SavedSelection(LOGFONT& saved) {
+    MoveMemory(&saved, &g_fallbackFont, sizeof(saved));
+    if (!Preferences::FontIsSet()) return false;
+
+    const LOGFONT& f = Preferences::Font();
+    lstrcpyn(saved.lfFaceName, f.lfFaceName, LF_FACESIZE);
+    saved.lfWeight    = f.lfWeight;
+    saved.lfItalic    = f.lfItalic;
+    saved.lfUnderline = f.lfUnderline;
+    saved.lfStrikeOut = f.lfStrikeOut;
+    saved.lfCharSet   = DEFAULT_CHARSET;
+    return true;
+}
+
 } // namespace
 
 namespace FontPicker {
@@ -68,24 +85,22 @@ void Init(HWND dlg, HINSTANCE inst) {
     // height/charset) or, when none is set, from the dialog font itself (the fallback), then
     // show it in the preview.
     SeedFallbackFont(dlg);
-    if (Preferences::FontIsSet()) {
-        const LOGFONT& f = Preferences::Font();
-        lstrcpyn(g_workingFont.lfFaceName, f.lfFaceName, LF_FACESIZE);
-        g_workingFont.lfWeight    = f.lfWeight;
-        g_workingFont.lfItalic    = f.lfItalic;
-        g_workingFont.lfUnderline = f.lfUnderline;
-        g_workingFont.lfStrikeOut = f.lfStrikeOut;
-        g_workingFont.lfCharSet   = DEFAULT_CHARSET;
-        g_workingFontSet = true;
-    }
+    g_workingFontSet = SavedSelection(g_workingFont);
     UpdateFontPreview(dlg);
 }
 
 void Open(HWND dlg) {
+    // The dialog opens on the working font, but its Apply button measures against the saved
+    // one: the two differ whenever a previous OK adopted a selection that Preferences has not
+    // persisted yet, and Apply must stay live for exactly that difference.
+    LOGFONT applied;
+    const bool appliedSet = SavedSelection(applied);
+
     LOGFONT selected;
     ZeroMemory(&selected, sizeof(selected));
     const FontPickerHelper::Result result = FontPickerHelper::Open(
-        g_inst, dlg, g_workingFont, !g_workingFontSet, g_fallbackFont, selected);
+        g_inst, dlg, g_workingFont, !g_workingFontSet, applied, !appliedSet,
+        g_fallbackFont, selected);
 
     if (result == FontPickerHelper::Result::Chosen)
         SetWorkingSelection(dlg, &selected);

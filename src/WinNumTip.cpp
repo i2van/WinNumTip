@@ -6,7 +6,6 @@
 // modules together (Taskbar / Overlay / NotifyIcon / Keyboard).
 
 #include "stdafx.h"
-
 #include "About.h"
 #include "FontPickerHelper.h"
 #include "KeyboardHook.h"

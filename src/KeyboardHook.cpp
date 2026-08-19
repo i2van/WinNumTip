@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "KeyboardHook.h"
-#include "Keyboard.h"
 
 namespace {
 
@@ -95,7 +94,7 @@ bool ShouldShow() {
     // g_desired first also skips the GetAsyncKeyState call entirely while hidden -- the
     // common idle state. The !IsWinDown() guard is essential: it must gate the counter
     // so a physically-held key never ticks toward a hide (no mid-hold disappearance).
-    if (g_desired == kShow && !Keyboard::IsWinDown()) {
+    if (g_desired == kShow && !WinAPI::Keyboard::IsWinDown()) {
         if (++g_upTicks >= kUpTicksToHide) { g_desired = kHide; g_upTicks = 0; }
     } else {
         g_upTicks = 0;

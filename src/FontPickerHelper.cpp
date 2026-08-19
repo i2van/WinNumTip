@@ -17,7 +17,7 @@
 namespace {
 
 constexpr LPCTSTR kHelperSwitch = TEXT("--font-picker");
-constexpr DWORD kExchangeVersion = 3;
+constexpr DWORD kExchangeVersion = 4;
 
 enum class WaitResult {
     Completed,
@@ -32,8 +32,12 @@ struct Exchange {
     HWND owner;
     volatile HWND dialog;
     LOGFONT font;
+    // The owner's persisted font, the baseline the Apply button measures the live selection
+    // against -- distinct from 'font', which is merely what the dialog opens on.
+    LOGFONT applied;
     LOGFONT fallback;
     LONG initialDefault;
+    LONG appliedDefault;
     volatile LONG status;
     // Set (by either side) while it is itself driving the *other* window's activation, so the
     // WM_ACTIVATE that results doesn't bounce back as a redundant kActivateOwnerMessage --
@@ -46,7 +50,9 @@ HWND g_dialog;
 LONG g_exchangeSerial;
 bool g_isHelperProcess;
 
-// Helper-side state for the live ChooseFont dialog.
+// Helper-side state for the live ChooseFont dialog. g_lastAppliedFont/g_lastAppliedDefault
+// track the owner's persisted font -- seeded from it, then advanced by each Apply -- so the
+// Apply button is enabled exactly while the live selection would change something.
 HINSTANCE g_inst;
 HWND g_parentDialog;
 LOGFONT g_fallbackFont;
@@ -704,13 +710,14 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 
 [[nodiscard]] FontPickerHelper::Result ShowDialog(HINSTANCE inst, HWND owner,
                                                  const LOGFONT& initial, bool initialDefault,
+                                                 const LOGFONT& applied, bool appliedDefault,
                                                  const LOGFONT& fallback,
                                                  LOGFONT& selected) {
     g_inst = inst;
     g_parentDialog = owner;
     g_resetToFallback = initialDefault;
-    MoveMemory(&g_lastAppliedFont, &initial, sizeof(g_lastAppliedFont));
-    g_lastAppliedDefault = initialDefault;
+    MoveMemory(&g_lastAppliedFont, &applied, sizeof(g_lastAppliedFont));
+    g_lastAppliedDefault = appliedDefault;
     g_applySucceeded = false;
     g_pendingDialogResult = FontPickerHelper::Result::Pending;
     ZeroMemory(&g_dialogResult, sizeof(g_dialogResult));
@@ -832,7 +839,8 @@ bool RunIfRequested(HINSTANCE inst) {
                 ZeroMemory(&selected, sizeof(selected));
                 result = ShowDialog(
                     inst, exchange->owner, exchange->font,
-                    exchange->initialDefault != 0, exchange->fallback, selected);
+                    exchange->initialDefault != 0, exchange->applied,
+                    exchange->appliedDefault != 0, exchange->fallback, selected);
                 if (result == Result::Chosen)
                     MoveMemory(&exchange->font, &selected, sizeof(exchange->font));
             }
@@ -849,8 +857,9 @@ bool RunIfRequested(HINSTANCE inst) {
     return true;
 }
 
-Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial,
-            bool initialDefault, const LOGFONT& fallback, LOGFONT& selected) {
+Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefault,
+            const LOGFONT& applied, bool appliedDefault, const LOGFONT& fallback,
+            LOGFONT& selected) {
     TCHAR mappingName[128];
     const LONG serial = ++g_exchangeSerial;
     wsprintf(mappingName, TEXT("Local\\WinNumTipFontPicker") APP_GUID TEXT("-%lu-%ld"),
@@ -877,8 +886,10 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial,
     exchange->version = kExchangeVersion;
     exchange->owner = owner;
     MoveMemory(&exchange->font, &initial, sizeof(exchange->font));
+    MoveMemory(&exchange->applied, &applied, sizeof(exchange->applied));
     MoveMemory(&exchange->fallback, &fallback, sizeof(exchange->fallback));
     exchange->initialDefault = initialDefault ? TRUE : FALSE;
+    exchange->appliedDefault = appliedDefault ? TRUE : FALSE;
 
     TCHAR exe[MAX_PATH];
     const DWORD exeLength = GetModuleFileName(nullptr, exe, ARRAYSIZE(exe));
