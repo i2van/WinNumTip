@@ -50,7 +50,7 @@ immediately.
   horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
   built-in strip) up to a full **Taskbar button** cell and the numbers scale to match.
 
-  > `WinNumTip.ini` keys: `TipSizePercent`
+  > `WinNumTip.ini` key: `TipSizePercent`
 
 - **Tip font** - click **Select...** to pick the typeface and style (weight, italic, underline,
   strikeout) the numbers are drawn with. When no font is chosen the taskbar's own font is used
@@ -62,40 +62,40 @@ immediately.
 - **Invert colors** - swaps the strip and number colors for a highlighted look. Off by
   default.
 
-  > `WinNumTip.ini` keys: `InvertColors`
+  > `WinNumTip.ini` key: `InvertColors`
 
 - **Compact view** - shrinks the strip's window down to a border and a small square around
   each digit.
 
-  > `WinNumTip.ini` keys: `CompactView`
+  > `WinNumTip.ini` key: `CompactView`
 
 - **Hide border** - hides the strip's outer border or (in **Compact view** mode) each tip's
   own border individually. Off by default (border shown).
 
-  > `WinNumTip.ini` keys: `HideBorder`
+  > `WinNumTip.ini` key: `HideBorder`
 
 - **Hide separator** - hides the divider lines between number tips. Off by default
   (separators shown).
 
-  > `WinNumTip.ini` keys: `HideSeparator`
+  > `WinNumTip.ini` key: `HideSeparator`
 
 - **Tip opacity** - how opaque the strip window is, as a percentage. Range `10`-`100`%,
   default `100`% (fully opaque).
 
-  > `WinNumTip.ini` keys: `OpacityPercent`
+  > `WinNumTip.ini` key: `OpacityPercent`
 
 - **Tips refresh** - how often, in milliseconds, the numbered tips re-sync with the
   taskbar buttons while shown, so the numbers stay aligned when a button appears,
   disappears or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
   but polls more often.
 
-  > `WinNumTip.ini` keys: `RefreshIntervalMs`
+  > `WinNumTip.ini` key: `RefreshIntervalMs`
 
 - **Win key poll** - how often, in milliseconds, the app checks the `Win` key state to show
   or hide the strip. Range `25`-`500` ms, default `75` ms; lower reacts faster to pressing
   or releasing `Win` but polls more often.
 
-  > `WinNumTip.ini` keys: `PollIntervalMs`
+  > `WinNumTip.ini` key: `PollIntervalMs`
 
 - **Reset to defaults** - restores every option above to its factory default in the dialog;
   the change is saved only if you then click **Apply** or **OK**.
