@@ -141,7 +141,8 @@ namespace String {
 // rather than uninitialized stack memory -- callers can use the result unconditionally.
 // Returns 'buffer' so it can be passed straight to an API (e.g. MessageBox, SetWindowText).
 template <int N>
-LPCTSTR Load(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
+_Ret_z_ LPCTSTR Load(HINSTANCE inst, UINT id, _Out_writes_z_(N) TCHAR (&buffer)[N]) {
+    buffer[0] = TEXT('\0');
     VERIFY(LoadString(inst, id, buffer, N));
     return buffer;
 }
@@ -152,7 +153,8 @@ LPCTSTR Load(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
 // 'source' is truncated instead of overrunning the buffer and the result is null-terminated.
 // Returns 'buffer' so it can be passed straight to an API.
 template <int N>
-LPCTSTR Copy(TCHAR (&buffer)[N], LPCTSTR source) {
+_Ret_z_ LPCTSTR Copy(_Out_writes_z_(N) TCHAR (&buffer)[N], _In_z_ LPCTSTR source) {
+    buffer[0] = TEXT('\0');
     VERIFY(lstrcpyn(buffer, source, N));
     return buffer;
 }
@@ -165,7 +167,7 @@ LPCTSTR Copy(TCHAR (&buffer)[N], LPCTSTR source) {
 // the old terminator's slot through buffer[N - 1], so a truncated append ends in that last
 // cell. Returns 'buffer'.
 template <int N>
-LPCTSTR Append(TCHAR (&buffer)[N], LPCTSTR source) {
+_Ret_z_ LPCTSTR Append(_Inout_updates_z_(N) TCHAR (&buffer)[N], _In_z_ LPCTSTR source) {
     const int used = lstrlen(buffer);
     VERIFY(lstrcpyn(buffer + used, source, N - used));
     return buffer;
@@ -184,8 +186,11 @@ LPCTSTR Append(TCHAR (&buffer)[N], LPCTSTR source) {
 // diagnosable thing to leave on screen than the partial text a failed call wrote. Returns
 // 'buffer' so it can be passed straight to an API (e.g. SetDlgItemText).
 template <int N, typename... Args>
-LPCTSTR Format(TCHAR (&buffer)[N], LPCTSTR format, Args... args) {
+_Ret_z_ LPCTSTR Format(_Out_writes_z_(N) TCHAR (&buffer)[N], _In_z_ LPCTSTR format,
+                       Args... args) {
+    buffer[0] = TEXT('\0');
     const int written = wnsprintf(buffer, N, format, args...);
+    buffer[N - 1] = TEXT('\0');
 
     ASSERT(written > 0);
     if (written <= 0) Copy(buffer, format);
