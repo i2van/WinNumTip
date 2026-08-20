@@ -62,8 +62,8 @@ TCHAR g_pollFormat[16];
 void UpdateValueText(HWND dlg) {
     const int pos = WinAPI::TrackBar::GetPos(dlg, IDC_SIZE_SLIDER);
     TCHAR buf[16];
-    if (pos <= g_minPct) lstrcpyn(buf, g_defaultText, ARRAYSIZE(buf));
-    else                 wsprintf(buf, g_sizeFormat, pos);
+    if (pos <= g_minPct) WinAPI::String::Copy(buf, g_defaultText);
+    else                 WinAPI::String::Format(buf, g_sizeFormat, pos);
     VERIFY(SetDlgItemText(dlg, IDC_SIZE_VALUE, buf));
 }
 
@@ -72,7 +72,7 @@ void UpdateValueText(HWND dlg) {
 void UpdateReadoutText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     const int pos = WinAPI::TrackBar::GetPos(dlg, sliderId);
     TCHAR buf[16];
-    wsprintf(buf, fmt, pos);
+    WinAPI::String::Format(buf, fmt, pos);
     VERIFY(SetDlgItemText(dlg, valueId, buf));
 }
 

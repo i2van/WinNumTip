@@ -862,8 +862,8 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
             LOGFONT& selected) {
     TCHAR mappingName[128];
     const LONG serial = ++g_exchangeSerial;
-    wsprintf(mappingName, TEXT("Local\\WinNumTipFontPicker") APP_GUID TEXT("-%lu-%ld"),
-             GetCurrentProcessId(), serial);
+    WinAPI::String::Format(mappingName, TEXT("Local\\WinNumTipFontPicker") APP_GUID TEXT("-%lu-%ld"),
+                           GetCurrentProcessId(), serial);
 
     const HANDLE mapping = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                              0, sizeof(Exchange), mappingName);
@@ -900,7 +900,7 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
         ShowError(inst, owner);
         return Result::Failed;
     }
-    wsprintf(commandLine, TEXT("\"%s\" %s \"%s\""), exe, kHelperSwitch, mappingName);
+    WinAPI::String::Format(commandLine, TEXT("\"%s\" %s \"%s\""), exe, kHelperSwitch, mappingName);
 
     STARTUPINFO si;
     ZeroMemory(&si, sizeof(si));

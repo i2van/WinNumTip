@@ -739,7 +739,7 @@ void Refresh() {
         if (Preferences::FontIsSet()) {
             const LOGFONT& pf = Preferences::Font();
             LOGFONT* const lf = &ncm.lfMessageFont;
-            lstrcpyn(lf->lfFaceName, pf.lfFaceName, LF_FACESIZE);
+            WinAPI::String::Copy(lf->lfFaceName, pf.lfFaceName);
             lf->lfWeight         = pf.lfWeight;
             lf->lfItalic         = pf.lfItalic;
             lf->lfUnderline      = pf.lfUnderline;

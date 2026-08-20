@@ -77,7 +77,7 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <EntryPointSymbol>Entry</EntryPointSymbol>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;uxtheme.lib;comctl32.lib;comdlg32.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;shlwapi.lib;uxtheme.lib;comctl32.lib;comdlg32.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>res\WinNumTip.manifest</AdditionalManifestFiles>

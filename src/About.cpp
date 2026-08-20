@@ -25,8 +25,7 @@ void FormatDlgItemText(HWND dlg, int id, LPCTSTR value) {
     ASSERT(gotFmt);
     if (gotFmt) {
         TCHAR text[128];
-        wsprintf(text, fmt, value);
-        VERIFY(SetDlgItemText(dlg, id, text));
+        VERIFY(SetDlgItemText(dlg, id, WinAPI::String::Format(text, fmt, value)));
     }
 }
 

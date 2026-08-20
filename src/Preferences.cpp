@@ -55,15 +55,15 @@ int g_pollMs = Preferences::kDefaultPollMs;
 void BuildIniPath() {
     g_iniPath[0] = 0;
     const DWORD n = GetModuleFileName(nullptr, g_iniPath, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH) { lstrcpyn(g_iniPath, kIniName, ARRAYSIZE(g_iniPath)); return; }
+    if (n == 0 || n >= MAX_PATH) { WinAPI::String::Copy(g_iniPath, kIniName); return; }
 
     int slash = -1;
     for (int i = 0; g_iniPath[i]; ++i)
         if (g_iniPath[i] == TEXT('\\')) slash = i;
     // Truncate after the last backslash (or to empty if none), then append the file name
-    // with a bounded copy into whatever room is left in the buffer.
+    // into whatever room is left in the buffer.
     g_iniPath[slash + 1] = 0;
-    lstrcpyn(g_iniPath + slash + 1, kIniName, static_cast<int>(ARRAYSIZE(g_iniPath)) - (slash + 1));
+    WinAPI::String::Append(g_iniPath, kIniName);
 }
 
 // Persist a boolean preference as "1"/"0" under the given key in the INI file.
@@ -74,7 +74,7 @@ void WriteBool(LPCTSTR key, bool value) {
 // Persist an integer preference under the given key in the INI file.
 void WriteInt(LPCTSTR key, int value) {
     TCHAR buf[16];
-    wsprintf(buf, TEXT("%d"), value);
+    WinAPI::String::Format(buf, TEXT("%d"), value);
     WritePrivateProfileString(kSection, key, buf, g_iniPath);
 }
 
@@ -129,7 +129,7 @@ void Load() {
     ReadString(kKeyFontFace, TEXT(""), face, ARRAYSIZE(face));
     g_fontSet = (face[0] != 0);
     if (g_fontSet) {
-        lstrcpyn(g_font.lfFaceName, face, LF_FACESIZE);
+        WinAPI::String::Copy(g_font.lfFaceName, face);
         g_font.lfWeight    = ReadInt(kKeyFontWeight, FW_NORMAL);
         g_font.lfItalic    = static_cast<BYTE>(ReadBool(kKeyFontItalic, false) ? 1 : 0);
         g_font.lfUnderline = static_cast<BYTE>(ReadBool(kKeyFontUnderline, false) ? 1 : 0);
@@ -181,7 +181,7 @@ void SetFont(const LOGFONT& lf) {
     if (lf.lfFaceName[0] == 0) { ClearFont(); return; }
 
     ZeroMemory(&g_font, sizeof(g_font));
-    lstrcpyn(g_font.lfFaceName, lf.lfFaceName, LF_FACESIZE);
+    WinAPI::String::Copy(g_font.lfFaceName, lf.lfFaceName);
     g_font.lfWeight    = lf.lfWeight;
     g_font.lfItalic    = lf.lfItalic;
     g_font.lfUnderline = lf.lfUnderline;

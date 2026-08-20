@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <windowsx.h>   // HANDLE_MSG message crackers
 #include <shellapi.h>   // Shell_NotifyIcon / NOTIFYICONDATA / SHAppBarMessage
+#include <shlwapi.h>    // wnsprintf (the buffer-size-checked wsprintf; see WinAPI::String::Format)
 #include <uxtheme.h>    // themed (native) button drawing + buffered paint
 #include <vssym32.h>    // TASKBARPARTS (TBP_*) + TMT_* theme property ids
 #include <objbase.h>    // COM (CoInitializeEx / CoCreateInstance)
@@ -102,7 +103,7 @@ namespace Url {
 // ShellExecute result <= 32) breaks into the debugger in Debug and is a no-op check in
 // Release.
 inline void Open(HWND owner, LPCTSTR url) {
-    VERIFY_SHELLEXEC(::ShellExecute(owner, TEXT("open"), url, nullptr, nullptr, SW_SHOWNORMAL));
+    VERIFY_SHELLEXEC(ShellExecute(owner, TEXT("open"), url, nullptr, nullptr, SW_SHOWNORMAL));
 }
 
 // OpenOnContextHelp(dlg, cmd, x, y, url): shared WM_SYSCOMMAND body for the DS_CONTEXTHELP
@@ -140,9 +141,55 @@ namespace String {
 // rather than uninitialized stack memory -- callers can use the result unconditionally.
 // Returns 'buffer' so it can be passed straight to an API (e.g. MessageBox, SetWindowText).
 template <int N>
-inline LPCTSTR Load(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
-    buffer[0] = 0;
-    ::LoadString(inst, id, buffer, N);
+LPCTSTR Load(HINSTANCE inst, UINT id, TCHAR (&buffer)[N]) {
+    VERIFY(LoadString(inst, id, buffer, N));
+    return buffer;
+}
+
+// Copy(buffer, source): copy 'source' into the fixed-size 'buffer', with its capacity deduced
+// as the template size parameter N the same way Load deduces it -- so no call site repeats a
+// buffer size, and none can pass a stale one. The bounded lstrcpyn does the work, so a longer
+// 'source' is truncated instead of overrunning the buffer and the result is null-terminated.
+// Returns 'buffer' so it can be passed straight to an API.
+template <int N>
+LPCTSTR Copy(TCHAR (&buffer)[N], LPCTSTR source) {
+    VERIFY(lstrcpyn(buffer, source, N));
+    return buffer;
+}
+
+// Append(buffer, source): append 'source' to the string already in 'buffer' -- the bounded
+// lstrcat Win32 does not provide -- limited to the room left in the deduced capacity N, so
+// what does not fit is truncated rather than written past the end. 'buffer' must already hold
+// a null-terminated string (an empty one makes this a plain Copy). The N - used limit covers
+// the terminator: lstrcpyn counts it, and N - used is exactly the number of cells left from
+// the old terminator's slot through buffer[N - 1], so a truncated append ends in that last
+// cell. Returns 'buffer'.
+template <int N>
+LPCTSTR Append(TCHAR (&buffer)[N], LPCTSTR source) {
+    const int used = lstrlen(buffer);
+    VERIFY(lstrcpyn(buffer + used, source, N - used));
+    return buffer;
+}
+
+// Format(buffer, format, args): substitute 'args' into the printf-style 'format' -- the
+// wsprintf placeholder set (%s, %d, %lu, ...) -- writing into the fixed-size 'buffer', with
+// its capacity deduced as the template size parameter N exactly as in Load and Copy. The
+// bounded wnsprintf does the work, so oversized output is truncated instead of overrunning
+// the buffer. buffer[0] is cleared first and the final cell forced to null afterwards --
+// wnsprintf does not promise to terminate a truncated result -- so the buffer is a valid
+// string on every path, including a format that produced nothing at all. A negative return
+// means wnsprintf rejected the call outright, which is a programming error (a malformed
+// template, or arguments that do not match it), so Debug breaks on it; Release falls back to
+// the raw 'format', since the unsubstituted template is both a valid string and a far more
+// diagnosable thing to leave on screen than the partial text a failed call wrote. Returns
+// 'buffer' so it can be passed straight to an API (e.g. SetDlgItemText).
+template <int N, typename... Args>
+LPCTSTR Format(TCHAR (&buffer)[N], LPCTSTR format, Args... args) {
+    const int written = wnsprintf(buffer, N, format, args...);
+
+    ASSERT(written > 0);
+    if (written <= 0) Copy(buffer, format);
+
     return buffer;
 }
 
@@ -234,8 +281,8 @@ namespace GdiObject {
 // DeleteObject means the handle was invalid or still selected into a DC, which is a
 // programming error rather than an expected runtime condition.
 template <typename T>
-inline void Delete(T& obj) {
-    if (obj) { VERIFY(::DeleteObject(obj)); obj = nullptr; }
+void Delete(T& obj) {
+    if (obj) { VERIFY(DeleteObject(obj)); obj = nullptr; }
 }
 
 } // namespace GdiObject
@@ -248,7 +295,7 @@ namespace Icon {
 // 'flags' picks the ownership: LR_SHARED for a system-managed icon that needs no cleanup,
 // LR_DEFAULTCOLOR for a caller-owned one that must be released with WinAPI::Icon::Destroy.
 [[nodiscard]] inline HICON Load(HINSTANCE inst, UINT id, int cxMetric, int cyMetric, UINT flags) {
-    return static_cast<HICON>(::LoadImage(inst, MAKEINTRESOURCE(id), IMAGE_ICON,
+    return static_cast<HICON>(LoadImage(inst, MAKEINTRESOURCE(id), IMAGE_ICON,
                                           GetSystemMetrics(cxMetric), GetSystemMetrics(cyMetric),
                                           flags));
 }
@@ -256,7 +303,7 @@ namespace Icon {
 // Destroy(icon): the icon counterpart of WinAPI::GdiObject::Delete -- release an icon the
 // caller owns (loaded without LR_SHARED) and null the handle so it cannot be freed twice.
 inline void Destroy(HICON& icon) {
-    if (icon) { VERIFY(::DestroyIcon(icon)); icon = nullptr; }
+    if (icon) { VERIFY(DestroyIcon(icon)); icon = nullptr; }
 }
 
 } // namespace Icon
@@ -268,7 +315,7 @@ namespace Font {
 // windowsx.h's GetWindowFont it also yields a window's own font, e.g. a dialog's already
 // DPI-scaled one used as the baseline that derived fonts keep the face and size of.
 [[nodiscard]] inline bool GetLogFont(HFONT font, LOGFONT& lf) {
-    return font != nullptr && ::GetObject(font, sizeof(lf), &lf) != 0;
+    return font != nullptr && GetObject(font, sizeof(lf), &lf) != 0;
 }
 
 } // namespace Font

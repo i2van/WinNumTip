@@ -61,7 +61,7 @@ bool SavedSelection(LOGFONT& saved) {
     if (!Preferences::FontIsSet()) return false;
 
     const LOGFONT& f = Preferences::Font();
-    lstrcpyn(saved.lfFaceName, f.lfFaceName, LF_FACESIZE);
+    WinAPI::String::Copy(saved.lfFaceName, f.lfFaceName);
     saved.lfWeight    = f.lfWeight;
     saved.lfItalic    = f.lfItalic;
     saved.lfUnderline = f.lfUnderline;
