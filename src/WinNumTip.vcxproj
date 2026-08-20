@@ -77,7 +77,7 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <EntryPointSymbol>Entry</EntryPointSymbol>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;shlwapi.lib;uxtheme.lib;comctl32.lib;comdlg32.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;ole32.lib;oleaut32.lib;shell32.lib;shlwapi.lib;uxtheme.lib;comctl32.lib;comdlg32.lib;winhttp.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>res\WinNumTip.manifest</AdditionalManifestFiles>
@@ -131,6 +131,7 @@
     <ClInclude Include="NotifyIcon.h" />
     <ClInclude Include="KeyboardHook.h" />
     <ClInclude Include="About.h" />
+    <ClInclude Include="UpdateCheck.h" />
     <ClInclude Include="DialogIcon.h" />
     <ClInclude Include="Preferences.h" />
     <ClInclude Include="PreferencesDialog.h" />
@@ -148,6 +149,7 @@
     <ClCompile Include="KeyboardHook.cpp" />
     <ClCompile Include="WinNumTip.cpp" />
     <ClCompile Include="About.cpp" />
+    <ClCompile Include="UpdateCheck.cpp" />
     <ClCompile Include="DialogIcon.cpp" />
     <ClCompile Include="Preferences.cpp" />
     <ClCompile Include="PreferencesDialog.cpp" />

@@ -90,7 +90,9 @@ CAPTION "About WinNumTip"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     ICON            IDI_APPICON,IDC_STATIC,7,7,20,20
-    LTEXT           "WinNumTip %s",IDC_ABOUT_NAME,36,7,189,10
+    LTEXT           "WinNumTip %s",IDC_ABOUT_NAME,36,7,63,10
+    CONTROL         "<a href=""https://github.com/i2van/WinNumTip/releases/latest"">Update</a>",IDC_ABOUT_UPDATE,
+                    "SysLink",NOT WS_VISIBLE | WS_GROUP | WS_TABSTOP,103,7,26,10
     CONTROL         "Shows the <a href=""https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec#taskbar"">Win+number (0..9) shortcut</a> for each app pinned to the taskbar.",IDC_ABOUT_DESC,
                     "SysLink",WS_GROUP | WS_TABSTOP,36,20,189,18
     CONTROL         "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md"">README</a>",IDC_ABOUT_README,

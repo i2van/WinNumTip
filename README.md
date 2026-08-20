@@ -30,6 +30,7 @@ position - **WinNumTip** just reminds you which number is which.
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
 - Adjustable tip font, inverted colors, compact view, independent border/separator hiding,
   tip opacity and tunable refresh/`Win` key poll intervals.
+- **Update** link in the **About** dialog whenever a newer release is published.
 
 ## Preferences
 
@@ -99,6 +100,11 @@ immediately.
 
 - **Reset to defaults** - restores every option above to its factory default in the dialog;
   the change is saved only if you then click **Apply** or **OK**.
+
+## Updates
+
+Every time the **About** dialog is opened update check is performed until a newer version is
+found, an [Update](https://github.com/i2van/WinNumTip/releases/latest) link appears if new version is available.
 
 ## Requirements
 

@@ -138,7 +138,7 @@ void MeasureSampleBearings(HDC dc, LPCTSTR text, int length, SampleRun& run) {
     if (!selected) return false;
 
     const int length = lstrlen(text);
-    const bool measured = GetTextExtentPoint32(dc, text, length, &run.extent) != FALSE;
+    const bool measured = !!GetTextExtentPoint32(dc, text, length, &run.extent);
     ASSERT(measured);
     if (measured) MeasureSampleBearings(dc, text, length, run);
     VERIFY(SelectObject(dc, previous));
@@ -983,7 +983,7 @@ bool ActivateDialog() {
     if (g_exchange) g_exchange->suppressOwnerActivate = TRUE;
     SetForegroundWindow(active);
 
-    const bool posted = PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0) != FALSE;
+    const bool posted = !!PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0);
     // If the follow-up message couldn't be queued, OnActivateChooseFont will never run to
     // clear the flag we just set -- clear it here instead so a later genuine activation is
     // never suppressed forever.

@@ -1,12 +1,8 @@
 #include "stdafx.h"
 #include "About.h"
 #include "DialogIcon.h"
+#include "UpdateCheck.h"
 #include "resource.h"
-
-// APP_VER_STR is injected by the build from Directory.Build.props (see WinNumTip.vcxproj).
-// Stringize it to fill the About dialog's "%s" placeholder.
-#define APP_STRINGIZE2(x) #x
-#define APP_STRINGIZE(x)  APP_STRINGIZE2(x)
 
 namespace {
 
@@ -29,6 +25,16 @@ void FormatDlgItemText(HWND dlg, int id, LPCTSTR value) {
     }
 }
 
+// Show -- or leave hidden -- the "Update" link that offers the newer release the background
+// check found (see UpdateCheck). Where the link sits is IDD_ABOUT's business: it has a fixed
+// spot after the app-name/version text, outside the name label's own rectangle so that
+// neither control can paint over the other, and nothing here moves or resizes it.
+void ApplyUpdateState(HWND dlg) {
+    const HWND link = GetDlgItem(dlg, IDC_ABOUT_UPDATE);
+    ASSERT(link);
+    ShowWindow(link, UpdateCheck::IsAvailable() ? SW_SHOW : SW_HIDE);
+}
+
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
     const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
@@ -37,25 +43,40 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     // class icon), so without this Alt+Tab / the taskbar show the generic default icon.
     DialogIcon::Set(dlg, inst);
 
-    // Bold the app-name header: derive a bold copy of the dialog's own (already
-    // DPI-scaled) font so the weight change keeps the same face and size.
+    // Bold the app-name header and the "Update" link that follows it: derive a bold copy of
+    // the dialog's own (already DPI-scaled) font so the weight change keeps the same face
+    // and size. One font serves both controls -- it is owned here and freed on WM_DESTROY.
     LOGFONT lf;
     if (WinAPI::Font::GetLogFont(GetWindowFont(dlg), lf)) {
         lf.lfWeight = FW_BOLD;
         g_boldFont = CreateFontIndirect(&lf);
         ASSERT(g_boldFont);
-        if (g_boldFont)
-            SetWindowFont(GetDlgItem(dlg, IDC_ABOUT_NAME), g_boldFont, TRUE);
+        if (g_boldFont) {
+            SetWindowFont(GetDlgItem(dlg, IDC_ABOUT_NAME),   g_boldFont, TRUE);
+            SetWindowFont(GetDlgItem(dlg, IDC_ABOUT_UPDATE), g_boldFont, TRUE);
+        }
     }
 
     SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_README)), TRUE);
 
-    FormatDlgItemText(dlg, IDC_ABOUT_NAME, TEXT(APP_STRINGIZE(APP_VER_STR)));
+    FormatDlgItemText(dlg, IDC_ABOUT_NAME, APP_VERSION);
+
+    // Offer the update straight away when a check earlier in this session already found one
+    // (so a re-opened About does not have to wait for the network again), then ask github.com
+    // once more unless that has already happened: an open that starts without an update in
+    // hand re-checks, so a release published while the app has been running is picked up
+    // without restarting it. The check runs on its own thread and reports back with
+    // WM_UPDATECHECK, so nothing here blocks the dialog from appearing.
+    ApplyUpdateState(dlg);
+    UpdateCheck::Start(dlg);
 
     return FALSE;
 }
 
-void OnDestroy(HWND /*dlg*/) {
+void OnDestroy(HWND dlg) {
+    // Stop the check (if one is still in flight) from posting WM_UPDATECHECK to this dialog
+    // once it is gone; its result stays cached for the next time About is opened.
+    UpdateCheck::Stop(dlg);
     WinAPI::GdiObject::Delete(g_boldFont);
 }
 
@@ -77,12 +98,13 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         return TRUE;
     }
 
-    // A SysLink (the description's "Win+number shortcut", or README/Project site) was
-    // clicked (mouse) or activated (Enter): open its URL, embedded in the control's
-    // <a href="..."> markup (see IDD_ABOUT).
+    // A SysLink (the description's "Win+number shortcut", README/Project site, or the
+    // "Update" link offering a newer release) was clicked (mouse) or activated (Enter): open
+    // its URL, embedded in the control's <a href="..."> markup (see IDD_ABOUT).
     if ((idCtrl == IDC_ABOUT_DESC ||
          idCtrl == IDC_ABOUT_README ||
-         idCtrl == IDC_ABOUT_PROJECT_SITE) &&
+         idCtrl == IDC_ABOUT_PROJECT_SITE ||
+         idCtrl == IDC_ABOUT_UPDATE) &&
         (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         const PNMLINK link = reinterpret_cast<PNMLINK>(hdr);
         WinAPI::Url::Open(dlg, link->item.szUrl);
@@ -109,6 +131,11 @@ INT_PTR CALLBACK AboutProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
         HANDLE_MSG(dlg, WM_COMMAND,    OnCommand);
+        case WM_UPDATECHECK:
+            // The background release check finished (UpdateCheck::Start, posted from its
+            // worker thread): reveal the "Update" link when it found a newer release.
+            ApplyUpdateState(dlg);
+            return TRUE;
         case WM_SYSCOMMAND:
             // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
             // the "?" button never enters help mode; OnSysCommand forwards the commands it does

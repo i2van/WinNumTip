@@ -18,17 +18,31 @@
 #include <uiautomation.h>  // IUIAutomation (taskbar button rects)
 #include <commctrl.h>   // SysLink control (NMLINK) + InitCommonControlsEx
 #include <dlgs.h>       // ChooseFont common-dialog template control ids (stc5, cmb1, ...)
+#include <winhttp.h>    // HTTPS request behind the About dialog's release check (UpdateCheck)
 
-// Custom application message posted by the shell to the message window and dispatched
-// there. Defined as a macro (not a namespaced constant) so the windowsx.h HANDLE_MSG
-// cracker can token-paste HANDLE_##message and use it as a switch's case label.
+// Custom application messages, each posted to a window of this app and dispatched there:
+// WM_NOTIFYICON by the shell to the message window, WM_UPDATECHECK by the release check's
+// worker thread to the About dialog. Defined as macros (not namespaced constants) so the
+// windowsx.h HANDLE_MSG cracker can token-paste HANDLE_##message and use it as a switch's
+// case label.
 #define WM_NOTIFYICON     (WM_APP + 1)   // notification area icon callback
+#define WM_UPDATECHECK    (WM_APP + 2)   // background release check finished
 
 // A single app-wide GUID appended to every unique, globally-named resource this
 // process creates (window classes, the single-instance mutex, and any future
 // events/file-mappings), so those names cannot collide with another process's. Use
 // via adjacent string-literal concatenation, e.g. TEXT("WinNumTipOverlay") APP_GUID.
 #define APP_GUID TEXT("-3F2E7A94-6B1D-4C8E-9A05-D71E2F6B0C43")
+
+// The display version this binary is stamped with (e.g. 2.1.0) as a string literal. The
+// build injects it unquoted from Directory.Build.props (see WinNumTip.vcxproj's APP_VER_STR
+// preprocessor definition), so it is stringized -- through the usual two-macro dance, since
+// the argument has to be expanded before it is quoted -- and wrapped in TEXT() once here,
+// for the About dialog's version line and the update check that compares it against the
+// latest published release.
+#define APP_STRINGIZE2(x) #x
+#define APP_STRINGIZE(x)  APP_STRINGIZE2(x)
+#define APP_VERSION       TEXT(APP_STRINGIZE(APP_VER_STR))
 
 // No-CRT memory support. We build with /NODEFAULTLIB, so ZeroMemory maps to the
 // ntdll RtlZeroMemory declared below (RtlFill/RtlMove are declared for symmetry).
@@ -227,7 +241,7 @@ namespace OS {
         VER_SET_CONDITION(mask, VER_MINORVERSION, VER_EQUAL);
         VER_SET_CONDITION(mask, VER_BUILDNUMBER,  VER_LESS);
 
-        cached = VerifyVersionInfoW(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask) != FALSE
+        cached = VerifyVersionInfoW(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask)
                      ? 1 : 0;
     }
     return cached != 0;
