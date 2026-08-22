@@ -44,3 +44,221 @@ jobs:
           name: WinNumTip-${{ matrix.platform }}
           path: build/${{ matrix.platform }}/${{ env.BUILD_CONFIGURATION }}/WinNumTip.exe
           if-no-files-found: error
+
+  # Microsoft Code Analysis (the /analyze engine) over every shipped platform in both
+  # configurations -- Debug and Release compile genuinely different code here, since
+  # ASSERT/VERIFY collapse away outside _DEBUG (see stdafx.h), so each needs its own pass.
+  #
+  # NativeRecommendedRules is the rule set, not AllRules: AllRules turns on the C++ Core
+  # Guidelines checkers, which flag several hundred style issues that simply do not apply
+  # to hand-rolled, CRT-less Win32 (no gsl::span, no std::array, no RAII wrappers by design).
+  # NativeRecommendedRules is the defect-finding subset -- buffer overruns, leaked handles,
+  # uninitialised memory, bad format strings -- and the tree is clean against it today.
+  analyze:
+    name: analyze ${{ matrix.platform }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ x64, Win32, ARM64 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Run code analysis
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $failed = $false
+
+          foreach ($configuration in 'Debug', 'Release') {
+            $log = "analysis-${{ matrix.platform }}-$configuration.log"
+
+            Write-Host "::group::${{ matrix.platform }} $configuration"
+            # /t:Rebuild because analysis results are cached alongside object files: an
+            # incremental build would silently skip the very files we came here to check.
+            msbuild WinNumTip.slnx `
+              /nologo /m /t:Rebuild /v:minimal `
+              /p:Configuration=$configuration `
+              /p:Platform=${{ matrix.platform }} `
+              /p:RunCodeAnalysis=true `
+              /p:EnableMicrosoftCodeAnalysis=true `
+              /p:CodeAnalysisRuleSet=NativeRecommendedRules.ruleset | Tee-Object -FilePath $log
+            $exitCode = $LASTEXITCODE
+            Write-Host '::endgroup::'
+
+            if ($exitCode -ne 0) {
+              Write-Host "::error::Analysis build failed (${{ matrix.platform }} $configuration, exit $exitCode)."
+              $failed = $true
+              continue
+            }
+
+            # The project deliberately keeps TreatWarningAsError off (it is ClCompile item
+            # metadata, so /p: cannot override it either), and analysis warnings do not fail
+            # the build on their own. Scan the log instead: the baseline is zero warnings at
+            # /W4 plus /analyze, so anything matching here is a regression worth stopping for.
+            foreach ($line in (Select-String -Path $log -Pattern ':\s*warning\s+[A-Za-z]+[0-9]+\s*:').Line) {
+              Write-Host "::error::$($line.Trim())"
+              $failed = $true
+            }
+          }
+
+          if ($failed) { exit 1 }
+          Write-Host 'Code analysis reported no warnings.'
+
+  # Second opinion from two open-source analysers. They overlap with /analyze only partly,
+  # and both are clean against the current tree, so they are gates rather than advisories.
+  lint:
+    name: lint
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The runner image already carries a MinGW build of cppcheck on PATH, but it was
+      # compiled with FILESDIR pointing at a directory that only ever existed on whoever
+      # built it, so it aborts with "Failed to load std.cfg" before checking anything.
+      # Chocolatey's package is the official build, which ships the cfg library next to
+      # the executable, where cppcheck looks before falling back to FILESDIR.
+      - name: Install cppcheck
+        run: choco install cppcheck --yes --no-progress
+
+      - name: Run cppcheck
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+
+          # Hence: take the first cppcheck that actually has its cfg library alongside it,
+          # and search PATH last, since that is where the unusable one lives.
+          $candidates = @(
+            (Join-Path $env:ProgramFiles 'Cppcheck\cppcheck.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Cppcheck\cppcheck.exe')
+          ) + @((Get-Command cppcheck.exe -All -ErrorAction Ignore).Source)
+
+          $cppcheck = $candidates |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
+            Where-Object { Test-Path -LiteralPath (Join-Path (Split-Path $_) 'cfg\std.cfg') } |
+            Select-Object -First 1
+
+          if (-not $cppcheck) {
+            Write-Host "Candidates considered: $($candidates -join ', ')"
+            throw 'No cppcheck.exe with a usable cfg\std.cfg was found.'
+          }
+          Write-Host "Using $cppcheck ($(& $cppcheck --version))"
+
+          # cppcheck has no sal.h, so the handful of SAL-annotated declarations in stdafx.h
+          # and UpdateCheck.cpp would abort the entire run with a critical 'unknownMacro'
+          # before a single check executes. Defining the four we actually use away fixes it.
+          $sal = Join-Path $env:RUNNER_TEMP 'cppcheck-sal.h'
+          Set-Content -LiteralPath $sal -Encoding ascii -Value @(
+            '#define _Ret_z_',
+            '#define _In_z_',
+            '#define _Out_writes_z_(n)',
+            '#define _Inout_updates_z_(n)'
+          )
+
+          # Debug|x64 gives cppcheck the most code to look at, since the ASSERT/VERIFY
+          # bodies survive there. --error-exitcode fires on *any* enabled finding regardless
+          # of severity, hence the narrowed --enable set and the targeted suppressions:
+          #   uninitMemberVarNoCtor -- Exchange is ZeroMemory'd after MapViewOfFile, and
+          #                            SampleRun/TextRun are brace-initialised at every use.
+          #   checkersReport        -- informational summary, not a finding.
+          # Per-site exceptions can use inline // cppcheck-suppress comments (--inline-suppr).
+          & $cppcheck `
+            --project=src\WinNumTip.vcxproj `
+            --project-configuration='Debug|x64' `
+            --enable=warning,performance,portability `
+            --inconclusive `
+            --check-level=exhaustive `
+            --platform=win64 `
+            --library=windows `
+            --std=c++20 `
+            --include=$sal `
+            --inline-suppr `
+            --suppress=missingIncludeSystem `
+            --suppress=checkersReport `
+            --suppress=unmatchedSuppression `
+            --suppress=uninitMemberVarNoCtor `
+            --template='{file}:{line}: {severity}: {message} [{id}]' `
+            --error-exitcode=1
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '::error::cppcheck reported findings.'
+            exit 1
+          }
+          Write-Host 'cppcheck reported no findings.'
+
+      # LLVM ships preinstalled on windows-latest (clang-tidy.exe, clang-cl.exe on PATH).
+      - name: Run clang-tidy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # clang-tidy wants a compilation database and this project is MSBuild-only, so
+          # synthesise one: clang-cl command lines mirroring WinNumTip.vcxproj, with the MSVC
+          # and Windows SDK header directories passed as /imsvc so they count as system
+          # headers and their own warnings stay out of the report.
+          #
+          # -requires pins the query to an install that actually carries the C++ toolset;
+          # without it -latest happily returns any Visual Studio shell based product that
+          # happens to be newer (SQL Server Management Studio, for one), which has no vcvars.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -prerelease -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if (-not $vsPath) { throw 'Could not locate a Visual Studio installation with the C++ toolset.' }
+
+          $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvars64.bat'
+          $include = (& $env:ComSpec /c ('call "' + $vcvars + '" >nul && set INCLUDE') |
+            Where-Object { $_ -like 'INCLUDE=*' }) -replace '^INCLUDE=', ''
+          if (-not $include) { throw 'Could not resolve the MSVC INCLUDE directories.' }
+
+          $src = ((Resolve-Path src).Path) -replace '\\', '/'
+          $arguments = @(
+            'clang-cl', '/c', '/nologo', '/std:c++20', '/EHs-c-', '/GR-',
+            '/DWIN32', '/D_WINDOWS', '/DUNICODE', '/D_UNICODE', '/D_DEBUG',
+            '/DAPP_VER_STR=0.0',  # stdafx.h stringizes this, so the value is irrelevant here
+            '/FIstdafx.h'         # the precompiled header every translation unit opens with
+          ) +
+          ($include -split ';' | Where-Object { $_ } | ForEach-Object { '/imsvc'; $_ -replace '\\', '/' }) +
+          @("-I$src")
+
+          $sources = Get-ChildItem -LiteralPath $src -Filter *.cpp |
+            Where-Object { $_.Name -ne 'stdafx.cpp' }  # nothing to analyse but the PCH itself
+
+          $sources | ForEach-Object {
+            [pscustomobject]@{
+              directory = $src
+              file      = "$src/$($_.Name)"
+              arguments = $arguments + @("$src/$($_.Name)")
+            }
+          } | ConvertTo-Json -Depth 3 |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'compile_commands.json') -Encoding utf8
+
+          # clang-analyzer-* only. Those are the path-sensitive checks that find real defects
+          # (leaked handles, null dereferences, uninitialised reads); the stylistic families
+          # are left off because they argue with Win32 idioms rather than finding bugs -- for
+          # instance misc-misplaced-const fires on every 'const HWND', which is what we want.
+          # Widening this list is fine, but expect to re-baseline when doing so.
+          $ErrorActionPreference = 'Continue'
+          $failed = $false
+
+          Set-Location $src
+          foreach ($source in $sources) {
+            Write-Host "::group::clang-tidy $($source.Name)"
+            clang-tidy -p $env:RUNNER_TEMP `
+              --checks='-*,clang-analyzer-*' `
+              --warnings-as-errors='*' `
+              --quiet $source.Name
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+            Write-Host '::endgroup::'
+          }
+
+          if ($failed) {
+            Write-Host '::error::clang-tidy reported findings.'
+            exit 1
+          }
+          Write-Host 'clang-tidy reported no findings.'
