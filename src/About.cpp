@@ -35,6 +35,20 @@ void ApplyUpdateState(HWND dlg) {
     ShowWindow(link, UpdateCheck::IsAvailable() ? SW_SHOW : SW_HIDE);
 }
 
+// Point the "Update" link at whatever can actually update this copy of the app. IDD_ABOUT's
+// own markup links to the latest release, which is what a copy unpacked from a release zip is
+// updated with; when winget installed the app instead (see UpdateCheck::IsWinGetInstall),
+// downloading that zip would leave the installed copy untouched, so the link is repointed at
+// the README section giving the "winget upgrade" command. Only the URL differs -- the link
+// still reads "Update" and keeps its place and size -- and both texts stay in the resources.
+void ApplyUpdateLink(HWND dlg, HINSTANCE inst) {
+    if (!UpdateCheck::IsWinGetInstall()) return;
+
+    TCHAR link[192];
+    VERIFY(SetDlgItemText(dlg, IDC_ABOUT_UPDATE,
+                          WinAPI::String::Load(inst, IDS_ABOUT_UPDATE_WINGET, link)));
+}
+
 BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     g_dlg = dlg;
     const HINSTANCE inst = reinterpret_cast<HINSTANCE>(lParam);
@@ -60,6 +74,8 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_README)), TRUE);
 
     FormatDlgItemText(dlg, IDC_ABOUT_NAME, APP_VERSION);
+
+    ApplyUpdateLink(dlg, inst);
 
     // Offer the update straight away when a check earlier in this session already found one
     // (so a re-opened About does not have to wait for the network again), then ask github.com

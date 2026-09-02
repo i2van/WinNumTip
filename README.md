@@ -32,6 +32,37 @@ position - **WinNumTip** just reminds you which number is which.
   tip opacity and tunable refresh/`Win` key poll intervals.
 - **Update** link in the **About** dialog whenever a newer release is published.
 
+## Installation
+
+**WinNumTip** is portable: there is nothing to set up system-wide, the app runs from wherever
+it is unpacked and keeps its settings in `WinNumTip.ini` next to the executable.
+
+### winget
+
+#### Install
+
+```powershell
+winget install --id i2van.WinNumTip
+```
+
+#### Update
+
+```powershell
+winget upgrade --id i2van.WinNumTip
+```
+
+> [!IMPORTANT]
+> Exit **WinNumTip** first - right-click the notification area icon and choose **Exit**.
+
+### Manual
+
+Download `WinNumTip-<platform>.zip` for your [platform](#platforms-supported) from the
+[latest release](https://github.com/i2van/WinNumTip/releases/latest), unpack it anywhere and
+run `WinNumTip.exe`.
+
+To update, exit the app and unpack the newer release over the previous one; the
+`WinNumTip.ini` settings file is left untouched.
+
 ## Preferences
 
 Double-click the notification area icon, right-click it and choose **Preferences...** or click
@@ -105,6 +136,10 @@ immediately.
 
 Every time the **About** dialog is opened update check is performed until a newer version is
 found, an [Update](https://github.com/i2van/WinNumTip/releases/latest) link appears if new version is available.
+
+The link opens the [latest release](https://github.com/i2van/WinNumTip/releases/latest) page,
+or the [winget update](#update) instructions when **WinNumTip** was
+[installed via winget](#winget) - the way that copy of the app is actually updated.
 
 ## Requirements
 

@@ -10,6 +10,7 @@
 #define IDS_DEFAULT                     202
 #define IDS_FONT_PICKER_ERROR           203
 #define IDS_APP_NAME                    204
+#define IDS_ABOUT_UPDATE_WINGET         205
 #define IDC_ABOUT_NAME                  1001
 #define IDC_ABOUT_DESC                  1002
 #define IDC_ABOUT_README                1003

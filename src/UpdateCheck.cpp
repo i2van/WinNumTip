@@ -31,6 +31,18 @@ constexpr UINT kVersionPartMax = 99999;
 constexpr int kVersionMax  = 32;
 constexpr int kLocationMax = 256;
 
+// How a winget-installed copy of the app gives itself away: winget unpacks this portable
+// package into its own Packages dir --
+//   %LOCALAPPDATA%\Microsoft\WinGet\Packages\i2van.WinNumTip_<source>\   (user scope)
+//   %ProgramFiles%\WinGet\Packages\i2van.WinNumTip_<source>\            (machine scope)
+// -- so the tail both scopes share, package identifier included, is what IsWinGetInstall
+// looks for in this executable's own path. The app can also be started through the
+// "WinNumTip" command winget puts on PATH, which is a symlink in the sibling Links dir, so
+// that directory counts as well: Windows normally reports the symlink's target as the module
+// path, but recognizing the link itself costs one more comparison and cannot misfire.
+constexpr LPCTSTR kWinGetPackages = TEXT("\\WinGet\\Packages\\i2van.WinNumTip");
+constexpr LPCTSTR kWinGetLinks    = TEXT("\\WinGet\\Links\\");
+
 // Cross-thread state. Each is a naturally aligned word, so a load or a store is a single
 // atomic instruction (no torn values) on every supported architecture -- the same reasoning
 // the keyboard hook's shared flag documents -- and that is all this needs: no Interlocked
@@ -227,6 +239,27 @@ void Stop(HWND notify) {
 
 bool IsAvailable() {
     return !!g_available;
+}
+
+bool IsWinGetInstall() {
+    // The answer cannot change while the process runs, so it is worked out once and cached --
+    // but in a plain constant-initialized int rather than a function-local static with a
+    // runtime initializer, whose thread-safe init guard needs CRT support this /NODEFAULTLIB
+    // build does not link (the same reasoning WinAPI::OS::IsWindows10 spells out). Only the
+    // UI thread ever calls this (About's WM_INITDIALOG), so the unguarded caching races with
+    // nothing.
+    static int cached = -1;   // -1 = not yet checked, 0 = false, 1 = true
+    if (cached < 0) {
+        // A path too long for the buffer is still returned null-terminated (and truncated at
+        // the end, while the directory looked for sits near the front), so it is searched as
+        // it stands; only an outright failure, which leaves nothing to search, is "no".
+        TCHAR path[MAX_PATH];
+        cached = GetModuleFileName(nullptr, path, ARRAYSIZE(path)) != 0 &&
+                 (StrStrI(path, kWinGetPackages) || StrStrI(path, kWinGetLinks))
+                     ? 1 : 0;
+    }
+
+    return cached != 0;
 }
 
 } // namespace UpdateCheck

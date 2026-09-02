@@ -24,4 +24,10 @@ void Stop(HWND notify);
 // a failure is never reported to the user, it just leaves the link hidden.
 [[nodiscard]] bool IsAvailable();
 
+// IsWinGetInstall(): true when this executable is running from the place winget puts the app
+// it installs, i.e. when winget owns this copy and is what has to update it. Tells the About
+// dialog which update route its "Update" link should offer -- "winget upgrade" instructions
+// rather than a release zip that would leave the installed copy untouched.
+[[nodiscard]] bool IsWinGetInstall();
+
 } // namespace UpdateCheck

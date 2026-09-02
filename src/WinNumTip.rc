@@ -223,6 +223,7 @@ BEGIN
     IDS_DEFAULT             "Default"
     IDS_FONT_PICKER_ERROR   "Unable to open font selector."
     IDS_APP_NAME            "WinNumTip"
+    IDS_ABOUT_UPDATE_WINGET "<a href=""https://github.com/i2van/WinNumTip/blob/main/README.md#update"">Update</a>"
 END
 
 #endif    // Neutral resources
