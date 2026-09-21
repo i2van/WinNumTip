@@ -217,8 +217,11 @@ jobs:
           if (-not $include) { throw 'Could not resolve the MSVC INCLUDE directories.' }
 
           $src = ((Resolve-Path src).Path) -replace '\\', '/'
+          # No '/c': clang-tidy replaces the compile job with its own syntax-only action, so
+          # '/c' goes unconsumed and newer clang-cl drivers count an 'argument unused during
+          # compilation' warning against every file ("1 warning generated." in the log).
           $arguments = @(
-            'clang-cl', '/c', '/nologo', '/std:c++20', '/EHs-c-', '/GR-',
+            'clang-cl', '/nologo', '/std:c++20', '/EHs-c-', '/GR-',
             '/DWIN32', '/D_WINDOWS', '/DUNICODE', '/D_UNICODE', '/D_DEBUG',
             '/DAPP_VER_STR=0.0',  # stdafx.h stringizes this, so the value is irrelevant here
             '/FIstdafx.h'         # the precompiled header every translation unit opens with
