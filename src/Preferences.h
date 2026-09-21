@@ -4,7 +4,7 @@
 // saved with the Get*/WritePrivateProfile* WinAPI). This is the model only; the editing
 // UI lives in PreferencesDialog.
 //
-// Six preferences today:
+// Seven preferences today:
 //  - the overlay "tip size" (see below),
 //  - "opacity": how opaque the overlay window is, as a percentage (see below),
 //  - "render flags": four on/off toggles for the overlay's look, packed as single-bit
@@ -21,9 +21,12 @@
 //  - "font": the face + style (weight/italic/underline/strikeout) the numbers are drawn
 //    with, chosen from the font dialog; unset means the taskbar's own font (the fallback),
 //  - "refresh interval": how often (ms) the shown overlay re-checks the taskbar buttons
-//    and rebuilds the bar in place, and
+//    and rebuilds the bar in place,
 //  - "poll interval": how often (ms) the app reconciles the overlay's visibility from the
-//    keyboard hook.
+//    keyboard hook, and
+//  - "start with Windows": whether the app registers itself in the current user's startup
+//    registry key so it launches at sign-in. Only the flag is persisted here; the registry
+//    entry itself is created/corrected/removed by Startup::Sync.
 // The tip-size preference controls how thick the numbered strip is
 // perpendicular to the taskbar's long axis (the tip height for a horizontal taskbar,
 // the tip width for a side-docked one). It is an integer percentage in [0, 100] of a
@@ -142,5 +145,14 @@ void SetRefreshIntervalMs(int ms);
 // Store the poll-timer interval (clamped to [kMinPollMs, kMaxPollMs]) both in memory and
 // in the INI file next to the executable.
 void SetPollIntervalMs(int ms);
+
+// Whether the app starts with Windows (see the file header): the persisted flag only, off
+// by default. The matching registry entry is reconciled by Startup::Sync.
+[[nodiscard]] bool StartWithWindows();
+
+// Store the start-with-Windows flag both in memory and in the INI file next to the
+// executable. The registry entry is not touched here; callers pass the new value on to
+// Startup::Sync.
+void SetStartWithWindows(bool enabled);
 
 } // namespace Preferences

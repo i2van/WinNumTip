@@ -5,6 +5,7 @@
 #include "FontPickerHelper.h"
 #include "Overlay.h"
 #include "Preferences.h"
+#include "Startup.h"
 #include "resource.h"
 
 #define WM_FONT_PICKER_APPLY_SELECTION FontPickerHelper::kApplySelectionMessage
@@ -95,6 +96,12 @@ void UpdateReadoutText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     };
 }
 
+// Read the Start with Windows checkbox: the autostart preference. Not part of RenderFlags,
+// which bundles only the overlay's look toggles.
+[[nodiscard]] bool ReadStartWithWindows(HWND dlg) {
+    return IsDlgButtonChecked(dlg, IDC_START_WITH_WINDOWS) == BST_CHECKED;
+}
+
 // Show or hide the Hide separator checkbox based on whether Compact view is currently
 // checked: compact forces it on anyway (see ReadFlags), so it would offer no real choice
 // while checked. Hide border stays visible regardless -- compact still honors it, just
@@ -116,6 +123,7 @@ void UpdateApplyState(HWND dlg) {
         WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER) != Preferences::RefreshIntervalMs() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER) != Preferences::PollIntervalMs() ||
         ReadFlags(dlg) != Preferences::Flags() ||
+        ReadStartWithWindows(dlg) != Preferences::StartWithWindows() ||
         FontPicker::HasChanges();
     WinAPI::Window::Enable(GetDlgItem(dlg, IDC_APPLY), changed);
 }
@@ -126,6 +134,11 @@ void SaveValues(HWND dlg) {
     Preferences::SetRefreshIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER));
     Preferences::SetPollIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER));
     Preferences::SetFlags(ReadFlags(dlg));
+    // Persist the autostart flag, then reconcile the registry entry with it right away:
+    // create/correct the entry when enabled, remove it when disabled.
+    const bool startWithWindows = ReadStartWithWindows(dlg);
+    Preferences::SetStartWithWindows(startWithWindows);
+    Startup::Sync(startWithWindows);
     FontPicker::Save();
 }
 
@@ -195,6 +208,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     VERIFY(CheckDlgButton(dlg, IDC_COMPACT_VIEW, Preferences::Flags().compact ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, Preferences::Flags().hideBorder ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, Preferences::Flags().hideSeparator ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_START_WITH_WINDOWS, Preferences::StartWithWindows() ? BST_CHECKED : BST_UNCHECKED));
     UpdateCompactVisibility(dlg);
 
     // Seed and show the font preview from the saved selection (or the fallback when none is
@@ -248,6 +262,7 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
         case IDC_INVERT:
         case IDC_HIDE_BORDER:
         case IDC_HIDE_SEPARATOR:
+        case IDC_START_WITH_WINDOWS:
             if (notify == BN_CLICKED) UpdateApplyState(dlg);
             break;
         case IDCANCEL:
@@ -280,8 +295,8 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
 // dialog's controls to their factory defaults -- the slim "Default" strip, no render
-// flags set (colors not inverted, border/separator shown, not compact), and the
-// fallback (taskbar) font. Only the controls are reset here; the change is persisted only
+// flags set (colors not inverted, border/separator shown, not compact), start with
+// Windows off, and the fallback (taskbar) font. Only the controls are reset here; the change is persisted only
 // if the user then confirms with OK or Apply, so Cancel still discards unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
@@ -293,6 +308,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         VERIFY(CheckDlgButton(dlg, IDC_COMPACT_VIEW, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, BST_UNCHECKED));
+        VERIFY(CheckDlgButton(dlg, IDC_START_WITH_WINDOWS, BST_UNCHECKED));
         UpdateCompactVisibility(dlg);
         UpdateValueText(dlg);
         UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);

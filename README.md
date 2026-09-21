@@ -30,6 +30,7 @@ position - **WinNumTip** just reminds you which number is which.
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
 - Adjustable tip font, inverted colors, compact view, independent border/separator hiding,
   tip opacity and tunable refresh/`Win` key poll intervals.
+- Optional start with Windows for the current user.
 - **Update** link in the **About** dialog whenever a newer release is published.
 
 ## Installation
@@ -53,6 +54,17 @@ winget upgrade --id i2van.WinNumTip
 
 > [!IMPORTANT]
 > Exit **WinNumTip** first - right-click the notification area icon and choose **Exit**.
+
+#### Uninstall
+
+```powershell
+winget uninstall --id i2van.WinNumTip
+```
+
+> [!IMPORTANT]
+> - Exit **WinNumTip** first - right-click the notification area icon and choose **Exit**.
+> - If **Start with Windows** is enabled, turn it off in [Preferences](#preferences) beforehand,
+> so no leftover startup entry points at the removed app.
 
 ### Manual
 
@@ -128,6 +140,10 @@ immediately.
   or releasing `Win` but polls more often.
 
   > `WinNumTip.ini` key: `PollIntervalMs`
+
+- **Start with Windows** - starts **WinNumTip** automatically for the current user.
+
+  > `WinNumTip.ini` key: `StartWithWindows`
 
 - **Reset to defaults** - restores every option above to its factory default in the dialog;
   the change is saved only if you then click **Apply** or **OK**.

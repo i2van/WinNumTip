@@ -13,6 +13,7 @@
 #include "Overlay.h"
 #include "Preferences.h"
 #include "PreferencesDialog.h"
+#include "Startup.h"
 #include "resource.h"
 
 // windowsx-style message cracker for the custom WM_NOTIFYICON message, so it can be
@@ -141,6 +142,11 @@ extern "C" void Entry() {
 
     // Load persisted preferences (INI next to the exe) before the overlay is first shown.
     Preferences::Load();
+
+    // While "Start with Windows" is on, self-heal the current startup entry:
+    // re-create it when missing and correct it when it points at a moved executable.
+    // When the preference is off the registry is left untouched.
+    if (Preferences::StartWithWindows()) Startup::Sync(true);
 
     // Hidden message-only window that hosts the notification area icon and drives the
     // overlay.

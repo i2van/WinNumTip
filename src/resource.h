@@ -40,6 +40,7 @@
 #define IDC_HIDE_SEPARATOR              1027
 #define IDC_COMPACT_VIEW                1028
 #define IDC_ABOUT_UPDATE                1029
+#define IDC_START_WITH_WINDOWS          1030
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -50,7 +51,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        102
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1030
+#define _APS_NEXT_CONTROL_VALUE         1031
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

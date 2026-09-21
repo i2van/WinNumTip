@@ -19,6 +19,7 @@ constexpr LPCTSTR kKeyFontUnderline = TEXT("FontUnderline");
 constexpr LPCTSTR kKeyFontStrikeOut = TEXT("FontStrikeOut");
 constexpr LPCTSTR kKeyRefreshMs = TEXT("RefreshIntervalMs");
 constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
+constexpr LPCTSTR kKeyStartWithWindows = TEXT("StartWithWindows");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
@@ -44,6 +45,9 @@ int g_refreshMs = Preferences::kDefaultRefreshMs;
 
 // Cached poll-timer interval in ms; mirrors the INI value.
 int g_pollMs = Preferences::kDefaultPollMs;
+
+// Cached start-with-Windows flag; mirrors the INI value.
+bool g_startWithWindows;
 
 // Clamp 'v' to the inclusive [lo, hi] range.
 [[nodiscard]] int Clamp(int v, int lo, int hi) {
@@ -123,6 +127,7 @@ void Load() {
     g_flags.compact       = ReadBool(kKeyCompactView, false);
     g_refreshMs    = ReadPercent(kKeyRefreshMs, kDefaultRefreshMs, kMinRefreshMs, kMaxRefreshMs);
     g_pollMs       = ReadPercent(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
+    g_startWithWindows = ReadBool(kKeyStartWithWindows, false);
 
     ZeroMemory(&g_font, sizeof(g_font));
     TCHAR face[LF_FACESIZE];
@@ -222,6 +227,15 @@ int PollIntervalMs() {
 void SetPollIntervalMs(int ms) {
     g_pollMs = Clamp(ms, kMinPollMs, kMaxPollMs);
     WriteInt(kKeyPollMs, g_pollMs);
+}
+
+bool StartWithWindows() {
+    return g_startWithWindows;
+}
+
+void SetStartWithWindows(bool enabled) {
+    g_startWithWindows = enabled;
+    WriteBool(kKeyStartWithWindows, enabled);
 }
 
 } // namespace Preferences
