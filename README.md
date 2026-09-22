@@ -25,13 +25,13 @@ position - **WinNumTip** just reminds you which number is which.
 
 - Numbered tips over taskbar buttons while the `Win` key is held.
 - Works with the taskbar docked on any edge.
-- Adjustable tip size via the notification area icon's **Preferences** dialog - from the
+- Adjustable tip size via the notification area icon's [Preferences](#preferences) dialog - from the
   default slim strip up to the full taskbar-button size (tip height for a
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
 - Adjustable tip font, inverted colors, compact view, independent border/separator hiding,
   tip opacity and tunable refresh/`Win` key poll intervals.
 - Optional start with Windows for the current user.
-- **Update** link in the **About** dialog whenever a newer release is published.
+- [Update](https://github.com/i2van/WinNumTip/releases/latest) link in the **About** dialog whenever a newer release is published.
 
 ## Installation
 
@@ -62,8 +62,9 @@ winget uninstall --id i2van.WinNumTip
 ```
 
 > [!IMPORTANT]
-> - Exit **WinNumTip** first - right-click the notification area icon and choose **Exit**.
-> - If **Start with Windows** is enabled, turn it off in [Preferences](#preferences) beforehand,
+> Exit **WinNumTip** first - right-click the notification area icon and choose **Exit**.
+>
+> If **Start with Windows** is enabled, turn it off in [Preferences](#preferences) beforehand,
 > so no leftover startup entry points at the removed app.
 
 ### Manual
