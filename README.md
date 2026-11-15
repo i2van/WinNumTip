@@ -140,7 +140,7 @@ immediately.
 
   > `WinNumTip.ini` key: `OpacityPercent`
 
-- **Tips refresh** - how often, in milliseconds, the numbered tips re-sync with the
+- **Tip refresh** - how often, in milliseconds, the numbered tips re-sync with the
   taskbar buttons while shown, so the numbers stay aligned when a button appears,
   disappears or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
   but polls more often.

@@ -126,7 +126,7 @@ BEGIN
     LTEXT           "Tip &opacity:",IDC_OPACITY_LABEL,7,122,110,10
     RTEXT           "%d%%",IDC_OPACITY_VALUE,193,122,70,10
     CONTROL         "",IDC_OPACITY_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,135,256,26
-    LTEXT           "Tips &refresh:",IDC_REFRESH_LABEL,7,164,110,10
+    LTEXT           "Tip &refresh:",IDC_REFRESH_LABEL,7,164,110,10
     RTEXT           "%d ms",IDC_REFRESH_VALUE,193,164,70,10
     CONTROL         "",IDC_REFRESH_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,177,256,26
     LTEXT           "&Win key poll:",IDC_POLL_LABEL,7,206,110,10
