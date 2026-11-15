@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Preferences.h"
 #include "Registry.h"
+#include "resource.h"
 
 namespace {
 
@@ -22,6 +23,7 @@ constexpr LPCTSTR kKeyFontStrikeOut = TEXT("FontStrikeOut");
 constexpr LPCTSTR kKeyRefreshMs = TEXT("RefreshIntervalMs");
 constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
 constexpr LPCTSTR kKeyStartWithWindows = TEXT("StartWithWindows");
+constexpr LPCTSTR kKeyAnimation = TEXT("Animation");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
@@ -50,6 +52,29 @@ int g_pollMs = Preferences::kDefaultPollMs;
 
 // Cached start-with-Windows flag; mirrors the INI value.
 bool g_startWithWindows;
+
+// Cached show animation; mirrors the INI value.
+Preferences::Animation g_animation = Preferences::Animation::System;
+
+// The INI name of Preferences::Animation::System, whose IDS_ANIMATION_SYSTEM drop-down text
+// is a "Windows default (%s)" format rather than a name.
+constexpr LPCTSTR kAnimationSystem = TEXT("System");
+static_assert(IDS_ANIMATION_SLIDE == IDS_ANIMATION_SYSTEM + static_cast<int>(Preferences::kMaxAnimation));
+
+// Load the INI name of 'animation' into 'buf': kAnimationSystem for System, otherwise its
+// IDS_ANIMATION_* string (IDS_ANIMATION_SYSTEM + value), the same text the drop-down shows.
+template <int N>
+LPCTSTR AnimationName(Preferences::Animation animation, TCHAR (&buf)[N]) {
+    if (animation == Preferences::Animation::System) return WinAPI::String::Copy(buf, kAnimationSystem);
+    return WinAPI::String::Load(GetModuleHandle(nullptr), IDS_ANIMATION_SYSTEM + static_cast<UINT>(animation), buf);
+}
+
+// Whether the Boolean system parameter 'action' (an SPI_GET* code) is on; 'def' when it
+// cannot be read.
+[[nodiscard]] bool SystemFlag(UINT action, bool def) {
+    BOOL value = FALSE;
+    return SystemParametersInfo(action, 0, &value, 0) ? value != FALSE : def;
+}
 
 // Clamp 'v' to the inclusive [lo, hi] range.
 [[nodiscard]] int Clamp(int v, int lo, int hi) {
@@ -130,6 +155,20 @@ void ReadString(LPCTSTR key, LPCTSTR def, LPTSTR buf, int cch) {
     GetPrivateProfileString(kSection, key, def, buf, static_cast<DWORD>(cch), g_iniPath);
 }
 
+// Read the show animation saved by name (see AnimationName), matched case-insensitively
+// and locale-independently; a missing or unknown name means System.
+[[nodiscard]] Preferences::Animation ReadAnimation() {
+    TCHAR name[16];
+    TCHAR candidate[16];
+    ReadString(kKeyAnimation, TEXT(""), name, ARRAYSIZE(name));
+    for (int i = static_cast<int>(Preferences::kMinAnimation); i <= static_cast<int>(Preferences::kMaxAnimation); ++i) {
+        const auto animation = static_cast<Preferences::Animation>(i);
+        if (CompareStringOrdinal(name, -1, AnimationName(animation, candidate), -1, TRUE) == CSTR_EQUAL)
+            return animation;
+    }
+    return Preferences::Animation::System;
+}
+
 } // namespace
 
 namespace Preferences {
@@ -150,6 +189,7 @@ void Load() {
     g_refreshMs    = ReadPercent(kKeyRefreshMs, kDefaultRefreshMs, kMinRefreshMs, kMaxRefreshMs);
     g_pollMs       = ReadPercent(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
     g_startWithWindows = ReadBool(kKeyStartWithWindows, false);
+    g_animation = ReadAnimation();
 
     ZeroMemory(&g_font, sizeof(g_font));
     TCHAR face[LF_FACESIZE];
@@ -232,6 +272,27 @@ void ClearFont() {
     WriteString(kKeyFontItalic, nullptr);
     WriteString(kKeyFontUnderline, nullptr);
     WriteString(kKeyFontStrikeOut, nullptr);
+}
+
+Animation ShowAnimation() {
+    return g_animation;
+}
+
+void SetShowAnimation(Animation animation) {
+    g_animation = static_cast<Animation>(Clamp(static_cast<int>(animation), static_cast<int>(kMinAnimation),
+                                               static_cast<int>(kMaxAnimation)));
+    TCHAR name[16];
+    WriteString(kKeyAnimation, AnimationName(g_animation, name));
+}
+
+Animation SystemAnimation() {
+    if (!SystemFlag(SPI_GETUIEFFECTS, true) ||
+        !SystemFlag(SPI_GETCLIENTAREAANIMATION, true) ||
+        !SystemFlag(SPI_GETTOOLTIPANIMATION, true)) {
+        return Animation::None;
+    }
+
+    return SystemFlag(SPI_GETTOOLTIPFADE, true) ? Animation::Fade : Animation::Slide;
 }
 
 int RefreshIntervalMs() {

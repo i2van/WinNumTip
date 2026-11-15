@@ -4,7 +4,7 @@
 // saved with the Get*/WritePrivateProfile* WinAPI). This is the model only; the editing
 // UI lives in PreferencesDialog.
 //
-// Seven preferences today:
+// Eight preferences today:
 //  - the overlay "tip size" (see below),
 //  - "opacity": how opaque the overlay window is, as a percentage (see below),
 //  - "render flags": four on/off toggles for the overlay's look, packed as single-bit
@@ -21,6 +21,8 @@
 //    each of those per-tip borders,
 //  - "font": the face + style (weight/italic/underline/strikeout) the numbers are drawn
 //    with, chosen from the font dialog; unset means the taskbar's own font (the fallback),
+//  - "animation": the standard Windows effect the overlay appears with (see Animation),
+//    following the Windows tooltip animation setting by default,
 //  - "refresh interval": how often (ms) the shown overlay re-checks the taskbar buttons
 //    and rebuilds the bar in place,
 //  - "poll interval": how often (ms) the app reconciles the overlay's visibility from the
@@ -130,6 +132,26 @@ void SetFont(const LOGFONT& lf);
 
 // Clear the font selection (revert to the taskbar-font fallback) in memory and the INI.
 void ClearFont();
+
+// The effect the overlay appears with. System follows the Windows tooltip animation
+// setting (see SystemAnimation); the rest are the standard window animations. The INI
+// stores them by English name, but the values double as the dialog's drop-down item
+// indexes and the INI name table's indexes, so keep their order.
+enum class Animation : int { System, Expand, Fade, None, Roll, Slide };
+constexpr Animation kMinAnimation = Animation::System;
+constexpr Animation kMaxAnimation = Animation::Slide;
+
+// The selected show animation, System by default.
+[[nodiscard]] Animation ShowAnimation();
+
+// Store the show animation both in memory and in the INI file next to the executable.
+void SetShowAnimation(Animation animation);
+
+// The animation Windows itself uses to show tooltips: None when UI effects, animation
+// effects (Settings > Accessibility > Visual effects) or tooltip animation are off,
+// otherwise Fade or Slide per the "Fade or slide ToolTips into view" setting. Read live,
+// so System tracks changes without a restart.
+[[nodiscard]] Animation SystemAnimation();
 
 // The overlay refresh-timer interval in milliseconds, in [kMinRefreshMs, kMaxRefreshMs]
 // (see the file header). A changed value takes effect when Preferences is applied.

@@ -29,7 +29,7 @@ position - **WinNumTip** just reminds you which number is which.
   default slim strip up to the full taskbar-button size (tip height for a
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
 - Adjustable tip font, dark theme, compact view, independent border/separator hiding,
-  tip opacity and tunable refresh/`Win` key poll intervals.
+  show animation, tip opacity and tunable refresh/`Win` key poll intervals.
 - Optional start with Windows for the current user.
 - [Update](https://github.com/i2van/WinNumTip/releases/latest) link in the **About** dialog whenever a newer release is published.
 
@@ -124,6 +124,16 @@ immediately.
   (separators shown).
 
   > `WinNumTip.ini` key: `HideSeparator`
+
+- **Tip animation** - the standard Windows effect used when the strip appears (hiding is
+  always instant): **Expand** (from the center), **Fade**, **None**, or **Roll** or
+  **Slide** (unfolding away from the taskbar). The default, **Windows default**, follows the
+  system settings - none when **Animation effects** or **Fade or slide ToolTips into view**
+  is turned off, otherwise fade or slide as Windows does for tooltips; the drop-down shows
+  the effect it currently resolves to. An explicit choice is used regardless of those
+  settings.
+
+  > `WinNumTip.ini` key: `Animation` (`System`, `Expand`, `Fade`, `None`, `Roll` or `Slide`)
 
 - **Tip opacity** - how opaque the strip window is, as a percentage. Range `10`-`100`%,
   default `100`% (fully opaque).

@@ -103,6 +103,28 @@ void UpdateReadoutText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
     return IsDlgButtonChecked(dlg, IDC_START_WITH_WINDOWS) == BST_CHECKED;
 }
 
+// Fill the Tip animation drop-down in Preferences::Animation order, so an item's index is
+// its value and its IDS_ANIMATION_* string id is IDS_ANIMATION_SYSTEM + that value. The
+// System item names the effect it currently resolves to, e.g. "Windows default (Fade)".
+void InitAnimationCombo(HWND dlg, HINSTANCE inst) {
+    const HWND combo = GetDlgItem(dlg, IDC_ANIMATION);
+    TCHAR name[16];
+    TCHAR format[32];
+    TCHAR item[48];
+    WinAPI::String::Load(inst, IDS_ANIMATION_SYSTEM + static_cast<int>(Preferences::SystemAnimation()), name);
+    WinAPI::String::Load(inst, IDS_ANIMATION_SYSTEM, format);
+    VERIFY(ComboBox_AddString(combo, WinAPI::String::Format(item, format, name)) >= 0);
+    for (int i = static_cast<int>(Preferences::kMinAnimation) + 1; i <= static_cast<int>(Preferences::kMaxAnimation); ++i)
+        VERIFY(ComboBox_AddString(combo, WinAPI::String::Load(inst, IDS_ANIMATION_SYSTEM + i, name)) >= 0);
+    VERIFY(ComboBox_SetCurSel(combo, static_cast<int>(Preferences::ShowAnimation())) >= 0);
+}
+
+// Read the Tip animation drop-down (see InitAnimationCombo).
+[[nodiscard]] Preferences::Animation ReadAnimation(HWND dlg) {
+    const int sel = ComboBox_GetCurSel(GetDlgItem(dlg, IDC_ANIMATION));
+    return sel < 0 ? Preferences::Animation::System : static_cast<Preferences::Animation>(sel);
+}
+
 // Show or hide the Hide separator checkbox based on whether Compact view is currently
 // checked: compact forces it on anyway (see ReadFlags), so it would offer no real choice
 // while checked. Hide border stays visible regardless -- compact still honors it, just
@@ -124,6 +146,7 @@ void UpdateApplyState(HWND dlg) {
         WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER) != Preferences::RefreshIntervalMs() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER) != Preferences::PollIntervalMs() ||
         ReadFlags(dlg) != Preferences::Flags() ||
+        ReadAnimation(dlg) != Preferences::ShowAnimation() ||
         ReadStartWithWindows(dlg) != Preferences::StartWithWindows() ||
         FontPicker::HasChanges();
     WinAPI::Window::Enable(GetDlgItem(dlg, IDC_APPLY), changed);
@@ -135,6 +158,7 @@ void SaveValues(HWND dlg) {
     Preferences::SetRefreshIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER));
     Preferences::SetPollIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER));
     Preferences::SetFlags(ReadFlags(dlg));
+    Preferences::SetShowAnimation(ReadAnimation(dlg));
     // Persist the autostart flag, then reconcile the registry entry with it right away:
     // create/correct the entry when enabled, remove it when disabled.
     const bool startWithWindows = ReadStartWithWindows(dlg);
@@ -211,6 +235,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, Preferences::Flags().hideSeparator ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_START_WITH_WINDOWS, Preferences::StartWithWindows() ? BST_CHECKED : BST_UNCHECKED));
     UpdateCompactVisibility(dlg);
+    InitAnimationCombo(dlg, inst);
 
     // Seed and show the font preview from the saved selection (or the fallback when none is
     // set); the font picker owns this state.
@@ -266,6 +291,9 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
         case IDC_START_WITH_WINDOWS:
             if (notify == BN_CLICKED) UpdateApplyState(dlg);
             break;
+        case IDC_ANIMATION:
+            if (notify == CBN_SELCHANGE) UpdateApplyState(dlg);
+            break;
         case IDCANCEL:
             VERIFY(EndDialog(dlg, IDCANCEL));
             break;
@@ -296,8 +324,9 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
 // dialog's controls to their factory defaults -- the slim "Default" strip, no render
-// flags set (dark theme following the Windows mode, border/separator shown, not compact), start with
-// Windows off, and the fallback (taskbar) font. Only the controls are reset here; the change is persisted only
+// flags set (dark theme following the Windows mode, border/separator shown, not compact), the
+// Windows default animation, start with Windows off, and the fallback (taskbar) font. Only the
+// controls are reset here; the change is persisted only
 // if the user then confirms with OK or Apply, so Cancel still discards unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
@@ -310,6 +339,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_START_WITH_WINDOWS, BST_UNCHECKED));
+        VERIFY(ComboBox_SetCurSel(GetDlgItem(dlg, IDC_ANIMATION), static_cast<int>(Preferences::Animation::System)) >= 0);
         UpdateCompactVisibility(dlg);
         UpdateValueText(dlg);
         UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);

@@ -45,7 +45,7 @@ constexpr LPCTSTR kWinGetLinks    = TEXT(R"(\WinGet\Links\)");
 
 // Cross-thread state. Each is a naturally aligned word, so a load or a store is a single
 // atomic instruction (no torn values) on every supported architecture -- the same reasoning
-// the keyboard hook's shared flag documents -- and that is all this needs: no Interlocked
+// the keyboard hook's shared state documents -- and that is all this needs: no Interlocked
 // read-modify-write is used, both because each variable has a single writer at any moment
 // (see Start and CheckThread) and because the Interlocked intrinsics are out-of-line CRT
 // calls on ARM64, which this /NODEFAULTLIB build cannot link.

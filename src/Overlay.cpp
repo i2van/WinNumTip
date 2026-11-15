@@ -45,6 +45,17 @@ RECT           g_tipRect[kMaxTips];  // each tip's own digit square (see ApplySt
 // preference (Preferences::RefreshIntervalMs), re-applied on each Show or Apply.
 constexpr UINT_PTR kRefreshTimer = 1;
 
+// Timer id for the Fade show animation (see AnimateShow and StepFade), which steps the layered alpha from
+// 0 up to the opacity preference over kAnimationMs; started when the hidden overlay is shown
+// and killed once the fade completes.
+constexpr UINT_PTR kFadeTimer = 2;
+
+// Duration of every show animation, the typical AnimateWindow length.
+constexpr DWORD kAnimationMs = 200;
+
+// GetTickCount at the start of the running fade.
+DWORD g_fadeStart;
+
 // Forward decls. Refresh() rebuilds the bar's contents in place for the current
 // taskbar; while a session is active the overlay window and its timer persist, so
 // updates never flicker and an empty period (0 buttons) can recover when a button
@@ -193,12 +204,34 @@ HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
 //   handler signature: void fn(HWND hwnd, HDC hdc)
 #define HANDLE_WM_PRINTCLIENT(hwnd, wParam, lParam, fn) ((fn)((hwnd), (HDC)(wParam)), 0L)
 
+// The layered-window alpha for the "opacity" preference.
+[[nodiscard]] BYTE OpacityAlpha() {
+    return static_cast<BYTE>(MulDiv(255, Preferences::OpacityPercent(), 100));
+}
+
+// One Fade step (kFadeTimer): raise the alpha linearly with the elapsed time, landing
+// exactly on the opacity preference once kAnimationMs has passed.
+void StepFade() {
+    const DWORD elapsed = GetTickCount() - g_fadeStart;
+    const BYTE target = OpacityAlpha();
+    if (elapsed >= kAnimationMs) {
+        (void)KillTimer(g_overlay, kFadeTimer);
+        VERIFY(SetLayeredWindowAttributes(g_overlay, 0, target, LWA_ALPHA));
+        return;
+    }
+
+    const BYTE alpha = static_cast<BYTE>(MulDiv(target, static_cast<int>(elapsed), kAnimationMs));
+    VERIFY(SetLayeredWindowAttributes(g_overlay, 0, alpha, LWA_ALPHA));
+}
+
 // WM_TIMER: re-collect the taskbar buttons and rebuild the bar in place if they
 // changed, so numbers stay aligned when a button appears/disappears (or the bar
 // recovers from a momentarily empty taskbar) without waiting for the Win key to be
 // released. Overlay visibility itself is owned by the message window's poll
 // (KeyboardHook::ShouldShow), so this timer only refreshes contents, never hides.
+// kFadeTimer instead drives the running Fade show animation.
 void OnTimer(HWND /*hwnd*/, UINT id) {
+    if (id == kFadeTimer) { StepFade(); return; }
     if (id != kRefreshTimer) return;
 
     RECT cur[kMaxTips];
@@ -241,11 +274,12 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 // by shrinking the window's own region (see ApplyStripRegion in Refresh) rather than a
 // layered-window color key. Reads Preferences directly rather than the Refresh-cached
 // flags, since both call sites (Show, ApplyPreferences) run this before Refresh
-// repopulates them. No-op while the window doesn't exist.
+// repopulates them. Also ends a running fade, since the alpha it would step towards may
+// have changed. No-op while the window doesn't exist.
 void ApplyLayeredAttributes() {
     if (!g_overlay) return;
-    const BYTE alpha = static_cast<BYTE>(MulDiv(255, Preferences::OpacityPercent(), 100));
-    VERIFY(SetLayeredWindowAttributes(g_overlay, 0, alpha, LWA_ALPHA));
+    (void)KillTimer(g_overlay, kFadeTimer);
+    VERIFY(SetLayeredWindowAttributes(g_overlay, 0, OpacityAlpha(), LWA_ALPHA));
 }
 
 // Create a themed STATIC child (a number tip or a separator line) relative to the
@@ -435,6 +469,46 @@ void ApplyEmpty() {
     if (g_overlay) DestroyChildren(g_overlay);
     FreeResources();
     g_snapN = 0;
+}
+
+// Start the selected show animation (Preferences::ShowAnimation, System resolved from the
+// Windows setting) for the hidden, fully laid-out overlay. Slide, Roll and Expand use
+// AnimateWindow -- Slide and Roll unfolding away from the taskbar's docked 'edge' -- which
+// blocks this thread for kAnimationMs (the keyboard hook has its own thread, so typing is
+// never held up). Fade is not left to AnimateWindow's AW_BLEND, which ends fully opaque and
+// strips WS_EX_LAYERED, discarding the opacity preference: it instead primes alpha 0 and
+// lets kFadeTimer ramp it up to the preference without blocking. Returns true only when
+// AnimateWindow has already shown the window; otherwise (Fade, None, or AnimateWindow
+// failing) the caller shows it at once.
+[[nodiscard]] bool AnimateShow(UINT edge) {
+    ApplyLayeredAttributes();   // settle a fade cut short by an empty period
+
+    Preferences::Animation animation = Preferences::ShowAnimation();
+    if (animation == Preferences::Animation::System) animation = Preferences::SystemAnimation();
+
+    DWORD away;
+    switch (edge) {
+        case ABE_TOP:   away = AW_VER_POSITIVE; break;
+        case ABE_LEFT:  away = AW_HOR_POSITIVE; break;
+        case ABE_RIGHT: away = AW_HOR_NEGATIVE; break;
+        default:        away = AW_VER_NEGATIVE; break; // BOTTOM
+    }
+
+    switch (animation) {
+        case Preferences::Animation::Fade:
+            VERIFY(SetLayeredWindowAttributes(g_overlay, 0, 0, LWA_ALPHA));
+            g_fadeStart = GetTickCount();
+            VERIFY(SetTimer(g_overlay, kFadeTimer, USER_TIMER_MINIMUM, nullptr));
+            return false;
+        case Preferences::Animation::Slide:
+            return AnimateWindow(g_overlay, kAnimationMs, AW_SLIDE | away) != FALSE;
+        case Preferences::Animation::Roll:
+            return AnimateWindow(g_overlay, kAnimationMs, away) != FALSE;
+        case Preferences::Animation::Expand:
+            return AnimateWindow(g_overlay, kAnimationMs, AW_CENTER) != FALSE;
+        default:
+            return false;
+    }
 }
 
 // Measure tip 'i's actual digit glyph (the same character the tip loop below draws) at
@@ -686,8 +760,12 @@ void Refresh() {
 
     // Update in place: suspend the window's painting, drop the old child controls and
     // per-show resources, then rebuild everything and repaint once (double-buffered
-    // via WS_EX_COMPOSITED) so the swap is flicker-free.
-    SetWindowRedraw(g_overlay, FALSE);
+    // via WS_EX_COMPOSITED) so the swap is flicker-free. A hidden window (a new session,
+    // or after an empty period) paints nothing anyway and is left out of WM_SETREDRAW:
+    // re-enabling redraw would mark it visible, and AnimateWindow refuses to show a
+    // window that already is.
+    const bool wasVisible = IsWindowVisible(g_overlay) != FALSE;
+    if (wasVisible) SetWindowRedraw(g_overlay, FALSE);
     DestroyChildren(g_overlay);
     FreeResources();
     SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
@@ -823,15 +901,20 @@ void Refresh() {
     // Re-enable painting, make sure the window is visible (it may have been hidden
     // during an empty period) and topmost, then repaint the whole bar once. Batching
     // the child swap between WM_SETREDRAW FALSE/TRUE keeps the in-place refresh from
-    // flickering.
-    SetWindowRedraw(g_overlay, TRUE);
-    SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_NOREDRAW);
-    RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
-
-    // Update the button snapshot the timer compares against on the next tick.
+    // flickering. A window coming out of hiding appears with the show animation instead.
+    //
+    // The button snapshot (which the timer compares against on the next tick) is updated
+    // first: AnimateWindow paints synchronously, and PaintBorder's compact per-tip frames
+    // iterate g_snapN, so a stale count would drop them from the animation frames.
     g_snapN = n;
     MoveMemory(g_snap, btn, sizeof(RECT) * n);
+
+    if (wasVisible) SetWindowRedraw(g_overlay, TRUE);
+    if (wasVisible || !AnimateShow(edge)) {
+        SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_NOREDRAW);
+        RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }
 }
 
 } // namespace
