@@ -28,7 +28,7 @@ constexpr LPCTSTR kMsgClass = TEXT("WinNumTipMsg") APP_GUID;
 // Single-instance mutex name; the shared app GUID keeps it globally unique.
 constexpr LPCTSTR kMutexName = TEXT("WinNumTip-Singleton") APP_GUID;
 
-// Persistent poll that drives the overlay from the keyboard hook's atomic flag. Runs on
+// Persistent poll that drives the overlay from the keyboard hook's press state. Runs on
 // the message window for the whole app lifetime (not just while shown), so a Win-down is
 // always picked up and the state self-heals every tick. Its interval is the user's "poll
 // interval" preference (Preferences::PollIntervalMs), re-armed when Preferences is applied.
@@ -71,7 +71,7 @@ void OnDestroy(HWND /*hwnd*/) {
 }
 
 // Persistent poll (kPollTimer): reconcile the desired overlay visibility from the
-// hook's atomic flag + live key state and apply it. Show/Hide are idempotent, so this
+// hook's press state + live key state and apply it. Show/Hide are idempotent, so this
 // is cheap when nothing changes and re-attempts Show if a previous create failed.
 void OnTimer(HWND /*hwnd*/, UINT id) {
     if (id != kPollTimer) return;
@@ -158,8 +158,9 @@ extern "C" void Entry() {
     mc.lpszClassName = kMsgClass;
     VERIFY(RegisterClassEx(&mc));
 
-    // Everything runs on this single (main) thread: COM apartment, UI Automation,
-    // and the message pump. The overlay window is created on demand (on Win-down)
+    // Everything else runs on this single (main) thread: COM apartment, UI Automation,
+    // and the message pump; only the keyboard hook has a thread of its own (see
+    // KeyboardHook::Install). The overlay window is created on demand (on Win-down)
     // and destroyed on Win-up.
     VERIFY(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));
     VERIFY(SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
@@ -176,7 +177,7 @@ extern "C" void Entry() {
     ASSERT(g_msgWnd);
     NotifyIcon::Add(g_inst, g_msgWnd);
     VERIFY(KeyboardHook::Install(g_inst));
-    // Drive the overlay by polling the hook's atomic flag + live key state.
+    // Drive the overlay by polling the hook's press state + live key state.
     ArmPollTimer();
 
     MSG m;

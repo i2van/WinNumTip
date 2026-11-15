@@ -53,8 +53,8 @@ constexpr UINT_PTR kFadeTimer = 2;
 // Duration of every show animation, the typical AnimateWindow length.
 constexpr DWORD kAnimationMs = 200;
 
-// GetTickCount at the start of the running fade.
-DWORD g_fadeStart;
+// GetTickCount64 at the start of the running fade.
+ULONGLONG g_fadeStart;
 
 // Forward decls. Refresh() rebuilds the bar's contents in place for the current
 // taskbar; while a session is active the overlay window and its timer persist, so
@@ -212,7 +212,7 @@ HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
 // One Fade step (kFadeTimer): raise the alpha linearly with the elapsed time, landing
 // exactly on the opacity preference once kAnimationMs has passed.
 void StepFade() {
-    const DWORD elapsed = GetTickCount() - g_fadeStart;
+    const ULONGLONG elapsed = GetTickCount64() - g_fadeStart;
     const BYTE target = OpacityAlpha();
     if (elapsed >= kAnimationMs) {
         (void)KillTimer(g_overlay, kFadeTimer);
@@ -497,7 +497,7 @@ void ApplyEmpty() {
     switch (animation) {
         case Preferences::Animation::Fade:
             VERIFY(SetLayeredWindowAttributes(g_overlay, 0, 0, LWA_ALPHA));
-            g_fadeStart = GetTickCount();
+            g_fadeStart = GetTickCount64();
             VERIFY(SetTimer(g_overlay, kFadeTimer, USER_TIMER_MINIMUM, nullptr));
             return false;
         case Preferences::Animation::Slide:
