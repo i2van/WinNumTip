@@ -140,6 +140,7 @@
     <ClInclude Include="FontPickerHelper.h" />
     <ClInclude Include="FontPreview.h" />
     <ClInclude Include="Startup.h" />
+    <ClInclude Include="Registry.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -159,6 +160,7 @@
     <ClCompile Include="FontPickerHelper.cpp" />
     <ClCompile Include="FontPreview.cpp" />
     <ClCompile Include="Startup.cpp" />
+    <ClCompile Include="Registry.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="WinNumTip.rc" />

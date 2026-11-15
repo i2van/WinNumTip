@@ -40,8 +40,8 @@ constexpr int kLocationMax = 256;
 // "WinNumTip" command winget puts on PATH, which is a symlink in the sibling Links dir, so
 // that directory counts as well: Windows normally reports the symlink's target as the module
 // path, but recognizing the link itself costs one more comparison and cannot misfire.
-constexpr LPCTSTR kWinGetPackages = TEXT("\\WinGet\\Packages\\i2van.WinNumTip");
-constexpr LPCTSTR kWinGetLinks    = TEXT("\\WinGet\\Links\\");
+constexpr LPCTSTR kWinGetPackages = TEXT(R"(\WinGet\Packages\i2van.WinNumTip)");
+constexpr LPCTSTR kWinGetLinks    = TEXT(R"(\WinGet\Links\)");
 
 // Cross-thread state. Each is a naturally aligned word, so a load or a store is a single
 // atomic instruction (no torn values) on every supported architecture -- the same reasoning

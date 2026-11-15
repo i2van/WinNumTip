@@ -1,7 +1,7 @@
 #pragma once
 
 // The modal Preferences dialog (IDD_PREFERENCES): edits the persisted user preferences
-// (overlay tip size, opacity, render flags -- invert colors, compact, and hide
+// (overlay tip size, opacity, render flags -- dark theme, compact, and hide
 // border/separator --, font, and the refresh/poll timer intervals). The values themselves
 // live in the Preferences model.
 namespace PreferencesDialog {

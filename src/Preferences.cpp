@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Preferences.h"
+#include "Registry.h"
 
 namespace {
 
@@ -8,7 +9,8 @@ constexpr LPCTSTR kSection          = TEXT("Preferences");
 constexpr LPCTSTR kKeyTipSize       = TEXT("TipSizePercent");
 constexpr LPCTSTR kLegacyKeyTipSize = TEXT("LabelSizePercent");
 constexpr LPCTSTR kKeyOpacity       = TEXT("OpacityPercent");
-constexpr LPCTSTR kKeyInvert        = TEXT("InvertColors");
+constexpr LPCTSTR kKeyDarkTheme     = TEXT("DarkTheme");
+constexpr LPCTSTR kLegacyKeyInvert  = TEXT("InvertColors");
 constexpr LPCTSTR kKeyHideBorder    = TEXT("HideBorder");
 constexpr LPCTSTR kKeyHideSeparator = TEXT("HideSeparator");
 constexpr LPCTSTR kKeyCompactView   = TEXT("CompactView");
@@ -70,16 +72,32 @@ void BuildIniPath() {
     WinAPI::String::Append(g_iniPath, kIniName);
 }
 
+// Whether the INI file next to the executable exists yet (i.e. preferences were saved).
+[[nodiscard]] bool IniExists() {
+    const DWORD attrs = GetFileAttributes(g_iniPath);
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// Persist 'value' under 'key' in the INI file (null removes the key). When this write is
+// about to create the file, the dark-theme flag is stored first: it was derived from the
+// Windows mode only because the file was missing, and a partial INI (e.g. just the font)
+// would otherwise make the next Load read it as off.
+void Write(LPCTSTR key, LPCTSTR value) {
+    if (!IniExists())
+        WritePrivateProfileString(kSection, kKeyDarkTheme, g_flags.darkTheme ? TEXT("1") : TEXT("0"), g_iniPath);
+    WritePrivateProfileString(kSection, key, value, g_iniPath);
+}
+
 // Persist a boolean preference as "1"/"0" under the given key in the INI file.
 void WriteBool(LPCTSTR key, bool value) {
-    WritePrivateProfileString(kSection, key, value ? TEXT("1") : TEXT("0"), g_iniPath);
+    Write(key, value ? TEXT("1") : TEXT("0"));
 }
 
 // Persist an integer preference under the given key in the INI file.
 void WriteInt(LPCTSTR key, int value) {
     TCHAR buf[16];
     WinAPI::String::Format(buf, TEXT("%d"), value);
-    WritePrivateProfileString(kSection, key, buf, g_iniPath);
+    Write(key, buf);
 }
 
 // Read an integer preference under the given key from the INI file, or 'def' if absent.
@@ -103,7 +121,7 @@ void WriteInt(LPCTSTR key, int value) {
 // Persist a string preference under the given key in the INI file. A null 'value' removes
 // the key from the section.
 void WriteString(LPCTSTR key, LPCTSTR value) {
-    WritePrivateProfileString(kSection, key, value, g_iniPath);
+    Write(key, value);
 }
 
 // Read a string preference under the given key into 'buf' (capacity 'cch' chars),
@@ -121,7 +139,11 @@ void Load() {
     const int legacyTipPercent = ReadPercent(kLegacyKeyTipSize, 0);
     g_tipPercent = ReadPercent(kKeyTipSize, legacyTipPercent);
     g_opacityPercent = ReadPercent(kKeyOpacity, kDefaultOpacityPercent, kMinOpacityPercent, kMaxOpacityPercent);
-    g_flags.invertColors = ReadBool(kKeyInvert, false);
+    // No INI yet (first run): follow the Windows system mode. Otherwise use the saved
+    // value, migrating the legacy "InvertColors" key.
+    g_flags.darkTheme     = IniExists()
+                          ? ReadBool(kKeyDarkTheme, ReadBool(kLegacyKeyInvert, false))
+                          : Registry::SystemUsesDarkTheme();
     g_flags.hideBorder    = ReadBool(kKeyHideBorder, false);
     g_flags.hideSeparator = ReadBool(kKeyHideSeparator, false);
     g_flags.compact       = ReadBool(kKeyCompactView, false);
@@ -168,7 +190,8 @@ const RenderFlags& Flags() {
 
 void SetFlags(const RenderFlags& flags) {
     g_flags = flags;
-    WriteBool(kKeyInvert, flags.invertColors);
+    WriteBool(kKeyDarkTheme, flags.darkTheme);
+    WriteString(kLegacyKeyInvert, nullptr);
     WriteBool(kKeyHideBorder, flags.hideBorder);
     WriteBool(kKeyHideSeparator, flags.hideSeparator);
     WriteBool(kKeyCompactView, flags.compact);

@@ -25,7 +25,7 @@
 #define IDC_POLL_LABEL                  1012
 #define IDC_POLL_VALUE                  1013
 #define IDC_POLL_SLIDER                 1014
-#define IDC_INVERT                      1015
+#define IDC_DARK_THEME                  1015
 #define IDC_FONT_LABEL                  1016
 #define IDC_FONT_NAME                   1017
 #define IDC_FONT_BUTTON                 1018

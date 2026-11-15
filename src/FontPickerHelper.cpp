@@ -862,7 +862,7 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
             LOGFONT& selected) {
     TCHAR mappingName[128];
     const LONG serial = ++g_exchangeSerial;
-    WinAPI::String::Format(mappingName, TEXT("Local\\WinNumTipFontPicker") APP_GUID TEXT("-%lu-%ld"),
+    WinAPI::String::Format(mappingName, TEXT(R"(Local\WinNumTipFontPicker)") APP_GUID TEXT("-%lu-%ld"),
                            GetCurrentProcessId(), serial);
 
     const HANDLE mapping = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,

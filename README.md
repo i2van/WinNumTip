@@ -28,7 +28,7 @@ position - **WinNumTip** just reminds you which number is which.
 - Adjustable tip size via the notification area icon's [Preferences](#preferences) dialog - from the
   default slim strip up to the full taskbar-button size (tip height for a
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
-- Adjustable tip font, inverted colors, compact view, independent border/separator hiding,
+- Adjustable tip font, dark theme, compact view, independent border/separator hiding,
   tip opacity and tunable refresh/`Win` key poll intervals.
 - Optional start with Windows for the current user.
 - [Update](https://github.com/i2van/WinNumTip/releases/latest) link in the **About** dialog whenever a newer release is published.
@@ -104,10 +104,11 @@ immediately.
 
   > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 
-- **Invert colors** - swaps the strip and number colors for a highlighted look. Off by
-  default.
+- **Dark theme** - draws the strip dark with light numbers. Defaults to the Windows mode
+  (**Settings** > **Personalization** > **Colors** > **Choose your default Windows mode**)
+  on the first run (no `WinNumTip.ini` yet) and on **Reset to defaults**.
 
-  > `WinNumTip.ini` key: `InvertColors`
+  > `WinNumTip.ini` key: `DarkTheme`
 
 - **Compact view** - shrinks the strip's window down to a border and a small square around
   each digit.

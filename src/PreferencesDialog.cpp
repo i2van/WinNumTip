@@ -5,6 +5,7 @@
 #include "FontPickerHelper.h"
 #include "Overlay.h"
 #include "Preferences.h"
+#include "Registry.h"
 #include "Startup.h"
 #include "resource.h"
 
@@ -89,7 +90,7 @@ void UpdateReadoutText(HWND dlg, int sliderId, int valueId, LPCTSTR fmt) {
 [[nodiscard]] Preferences::RenderFlags ReadFlags(HWND dlg) {
     const bool compact = IsDlgButtonChecked(dlg, IDC_COMPACT_VIEW) == BST_CHECKED;
     return {
-        .invertColors  = IsDlgButtonChecked(dlg, IDC_INVERT) == BST_CHECKED,
+        .darkTheme     = IsDlgButtonChecked(dlg, IDC_DARK_THEME) == BST_CHECKED,
         .compact       = compact,
         .hideBorder    = IsDlgButtonChecked(dlg, IDC_HIDE_BORDER) == BST_CHECKED,
         .hideSeparator = compact || IsDlgButtonChecked(dlg, IDC_HIDE_SEPARATOR) == BST_CHECKED,
@@ -204,7 +205,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
                            kPollTickFreq, kPollPageStep, Preferences::PollIntervalMs());
     UpdateReadoutText(dlg, IDC_POLL_SLIDER, IDC_POLL_VALUE, g_pollFormat);
 
-    VERIFY(CheckDlgButton(dlg, IDC_INVERT, Preferences::Flags().invertColors ? BST_CHECKED : BST_UNCHECKED));
+    VERIFY(CheckDlgButton(dlg, IDC_DARK_THEME, Preferences::Flags().darkTheme ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_COMPACT_VIEW, Preferences::Flags().compact ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, Preferences::Flags().hideBorder ? BST_CHECKED : BST_UNCHECKED));
     VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, Preferences::Flags().hideSeparator ? BST_CHECKED : BST_UNCHECKED));
@@ -259,7 +260,7 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
         case IDC_COMPACT_VIEW:
             if (notify == BN_CLICKED) UpdateCompactVisibility(dlg);
             [[fallthrough]];
-        case IDC_INVERT:
+        case IDC_DARK_THEME:
         case IDC_HIDE_BORDER:
         case IDC_HIDE_SEPARATOR:
         case IDC_START_WITH_WINDOWS:
@@ -295,7 +296,7 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
 // dialog's controls to their factory defaults -- the slim "Default" strip, no render
-// flags set (colors not inverted, border/separator shown, not compact), start with
+// flags set (dark theme following the Windows mode, border/separator shown, not compact), start with
 // Windows off, and the fallback (taskbar) font. Only the controls are reset here; the change is persisted only
 // if the user then confirms with OK or Apply, so Cancel still discards unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
@@ -304,7 +305,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         WinAPI::TrackBar::SetPos(dlg, IDC_OPACITY_SLIDER, Preferences::kDefaultOpacityPercent);
         WinAPI::TrackBar::SetPos(dlg, IDC_REFRESH_SLIDER, Preferences::kDefaultRefreshMs);
         WinAPI::TrackBar::SetPos(dlg, IDC_POLL_SLIDER, Preferences::kDefaultPollMs);
-        VERIFY(CheckDlgButton(dlg, IDC_INVERT, BST_UNCHECKED));
+        VERIFY(CheckDlgButton(dlg, IDC_DARK_THEME, Registry::SystemUsesDarkTheme() ? BST_CHECKED : BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_COMPACT_VIEW, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_BORDER, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, BST_UNCHECKED));

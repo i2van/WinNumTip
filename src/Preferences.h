@@ -8,8 +8,9 @@
 //  - the overlay "tip size" (see below),
 //  - "opacity": how opaque the overlay window is, as a percentage (see below),
 //  - "render flags": four on/off toggles for the overlay's look, packed as single-bit
-//    fields in one RenderFlags struct (see below) -- "invert colors" swaps the strip and
-//    number colors for a highlighted look; "hide border" / "hide separator" each strip
+//    fields in one RenderFlags struct (see below) -- "dark theme" draws the strip dark
+//    with light numbers (defaulting, on a first run with no INI file yet, to the Windows
+//    system mode); "hide border" / "hide separator" each strip
 //    away one visual layer (the strip's border, the divider lines between number tips)
 //    for a progressively more minimal look; and "compact" shrinks the strip's window
 //    down to a border and a small square around each digit, letting whatever is behind
@@ -89,9 +90,9 @@ void SetOpacityPercent(int percent);
 // fields and bundled in one struct rather than kept as separate bools so the model, the
 // dialog, and the INI persistence can load/save/compare them together.
 struct RenderFlags {
-    // Strip filled with the number color, numbers drawn in the bar color (a highlighted
-    // look).
-    bool invertColors : 1 = false;
+    // Strip filled with the darker and numbers drawn in the lighter of the taskbar's bar
+    // and text colors. Defaults to the Windows system mode when no INI file exists yet.
+    bool darkTheme     : 1 = false;
     // Shrink the strip's window down to a border and a small square around each digit,
     // letting whatever is behind the overlay show through everywhere else (see
     // ApplyStripRegion). The border frames each digit's square individually rather than

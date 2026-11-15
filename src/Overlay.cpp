@@ -23,7 +23,7 @@ bool     g_ownFont;    // true when g_font must be DeleteObject'd (not a stock f
 HTHEME   g_theme;
 HBRUSH   g_lineBrush;  // solid brush that paints the separator lines
 HBRUSH   g_borderBrush;  // solid brush, fixed to the system window-frame color, that paints the outer border
-HBRUSH   g_bgBrush;    // solid strip-fill brush, only in invert-colors mode
+HBRUSH   g_bgBrush;    // solid strip-fill brush, only in dark-theme mode
 Preferences::RenderFlags g_flags;  // cached; mirrors Preferences::Flags() for this show
 int      g_bgPart = TBP_BACKGROUNDBOTTOM;  // taskbar background part for the docked edge
 COLORREF g_textColor;  // resolved from the theme / system colors in Show
@@ -127,7 +127,7 @@ void PaintBorder(HWND hwnd, HDC hdc, const RECT& rc) {
     }
 }
 
-// Paint the bar background: in invert-colors mode a solid fill with the number color;
+// Paint the bar background: in dark-theme mode a solid fill with the darker theme color;
 // otherwise the taskbar theme -- as a flat fill of the sampled bar color instead of the
 // theme drawing itself when "hide border" is set (see the flat-fill branch below), or
 // falling back to the 3D face color when the theme is unavailable, e.g. classic mode.
@@ -140,7 +140,7 @@ void PaintBorder(HWND hwnd, HDC hdc, const RECT& rc) {
 void PaintBackground(HWND hwnd, HDC hdc) {
     RECT rc;
     VERIFY(GetClientRect(hwnd, &rc));
-    if (g_flags.invertColors && g_bgBrush) {
+    if (g_flags.darkTheme && g_bgBrush) {
         FillRect(hdc, &rc, g_bgBrush);
     } else if (g_theme && g_flags.hideBorder) {
         // DrawThemeBackground stretches the visual style's own edge/highlight to fit our
@@ -313,6 +313,12 @@ constexpr int kLumaWeightB  = 114;
 constexpr int kLumaScale    = 1000;
 constexpr int kLumaMidpoint = 128;
 
+// Perceived brightness of 'c' in the 0..255 range.
+[[nodiscard]] int Luma(COLORREF c) {
+    return (GetRValue(c) * kLumaWeightR + GetGValue(c) * kLumaWeightG +
+            GetBValue(c) * kLumaWeightB) / kLumaScale;
+}
+
 // Contrasting number-text color for the given bar background: prefer the theme's own
 // text color, else pick the light/dark system text color by background luminance.
 [[nodiscard]] COLORREF PickTextColor(HTHEME theme, int part, COLORREF bar) {
@@ -320,10 +326,8 @@ constexpr int kLumaMidpoint = 128;
     if (theme && SUCCEEDED(GetThemeColor(theme, part, 0, TMT_TEXTCOLOR, &themed)))
         return themed;
     if (bar == CLR_INVALID) return GetSysColor(COLOR_WINDOWTEXT);
-    const int lum = (GetRValue(bar) * kLumaWeightR + GetGValue(bar) * kLumaWeightG +
-                     GetBValue(bar) * kLumaWeightB) / kLumaScale;
 
-    return lum < kLumaMidpoint ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT);
+    return Luma(bar) < kLumaMidpoint ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT);
 }
 
 // Separator color: the midpoint between the text color and the bar background, so the
@@ -698,13 +702,15 @@ void Refresh() {
     // used throughout the rest of Refresh and by PaintBackground/PaintBorder.
     g_flags = Preferences::Flags();
 
-    // Invert-colors mode swaps the roles of the bar and number colors: the strip is
-    // filled solid with the number (text) color and the numbers are drawn in the bar
-    // color, giving a highlighted look. The fill is cached in a brush for PaintBackground;
-    // in normal mode the themed taskbar background is painted instead.
-    if (g_flags.invertColors) {
-        g_textColor = barColor != CLR_INVALID ? barColor : GetSysColor(COLOR_3DFACE);
-        g_bgBrush   = CreateSolidBrush(textColor);
+    // Dark-theme mode fills the strip solid with the darker of the bar and number colors
+    // and draws the numbers in the lighter one, so the strip is always dark with light
+    // numbers whatever the taskbar theme. The fill is cached in a brush for
+    // PaintBackground; in normal mode the themed taskbar background is painted instead.
+    if (g_flags.darkTheme) {
+        const COLORREF bar = barColor != CLR_INVALID ? barColor : GetSysColor(COLOR_3DFACE);
+        const bool barIsDarker = Luma(bar) <= Luma(textColor);
+        g_textColor = barIsDarker ? textColor : bar;
+        g_bgBrush   = CreateSolidBrush(barIsDarker ? bar : textColor);
         ASSERT(g_bgBrush);
     } else {
         g_textColor = textColor;
@@ -763,7 +769,7 @@ void Refresh() {
     // bar colors so it is clearly visible yet softer than the numbers. Its thickness
     // comes from the system border metric and it is inset from the bar ends by the fixed
     // window-frame metric, so both scale with DPI. The midpoint uses the true text/bar
-    // colors, so it stays balanced whether or not the colors are inverted. The outer
+    // colors, so it stays balanced whether or not the dark theme is on. The outer
     // border uses its own brush (g_borderBrush), fixed to the system window-frame color
     // regardless of the theme, so it stays a normal-looking border unlike the separators;
     // in "compact" mode PaintBorder frames each tip's own digit square with it instead of
