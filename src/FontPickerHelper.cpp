@@ -621,6 +621,14 @@ UINT_PTR OnChooseFontHookCommand(HWND dialog, int id, HWND /*control*/,
     return FALSE;
 }
 
+// WM_SYSCOMMAND: the title-bar "?" (context-help) button that FONTSELECTORDLG's DS_CONTEXTHELP
+// style adds opens the README's Tip font section (see WinAPI::Url::OpenOnContextHelp).
+void OnChooseFontSysCommand(HWND dialog, UINT cmd, int x, int y) {
+    WinAPI::Url::OpenOnContextHelp(dialog, cmd, x, y,
+                                   TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md#tip-font"),
+                                   DefSubclassProc);
+}
+
 LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                        UINT_PTR /*id*/, DWORD_PTR /*ref*/) {
     switch (msg) {
@@ -632,6 +640,7 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         HANDLE_MSG(hwnd, WM_PAINT, OnChooseFontPaint);
         HANDLE_MSG(hwnd, WM_ACTIVATE, OnChooseFontActivate);
         HANDLE_MSG(hwnd, WM_FONT_PICKER_ACTIVATE, OnActivateChooseFont);
+        HANDLE_MSG(hwnd, WM_SYSCOMMAND, OnChooseFontSysCommand);
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 }

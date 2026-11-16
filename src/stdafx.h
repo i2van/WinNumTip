@@ -125,11 +125,13 @@ inline void Open(HWND owner, LPCTSTR url) {
 // -- instead of entering Windows' per-control help mode; every other system command (move,
 // close, ...) is forwarded to the default handler unchanged. Each dialog's cracker-dispatched
 // OnSysCommand forwards here with the URL it documents (see HANDLE_WM_SYSCOMMAND callers).
-inline void OpenOnContextHelp(HWND dlg, UINT cmd, int x, int y, LPCTSTR url) {
+// A subclassed dialog passes DefSubclassProc as 'defProc' so the rest reach its own chain.
+inline void OpenOnContextHelp(HWND dlg, UINT cmd, int x, int y, LPCTSTR url,
+                              LRESULT (WINAPI* defProc)(HWND, UINT, WPARAM, LPARAM) = DefWindowProc) {
     if ((cmd & 0xFFF0) == SC_CONTEXTHELP)
         Open(dlg, url);
     else
-        FORWARD_WM_SYSCOMMAND(dlg, cmd, x, y, DefWindowProc);
+        FORWARD_WM_SYSCOMMAND(dlg, cmd, x, y, defProc);
 }
 
 } // namespace Url
