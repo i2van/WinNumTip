@@ -71,7 +71,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
         }
     }
 
-    SendMessage(dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(GetDlgItem(dlg, IDC_ABOUT_README)), TRUE);
+    FORWARD_WM_NEXTDLGCTL(dlg, GetDlgItem(dlg, IDC_ABOUT_README), TRUE, SendMessage);
 
     FormatDlgItemText(dlg, IDC_ABOUT_NAME, APP_VERSION);
 

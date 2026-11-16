@@ -22,7 +22,7 @@
 //  - "font": the face + style (weight/italic/underline/strikeout) the numbers are drawn
 //    with, chosen from the font dialog; unset means the taskbar's own font (the fallback),
 //  - "animation": the standard Windows effect the overlay appears with (see Animation),
-//    following the Windows tooltip animation setting by default,
+//    following the Windows tooltip animation setting by default, and its duration (ms),
 //  - "refresh interval": how often (ms) the shown overlay re-checks the taskbar buttons
 //    and rebuilds the bar in place,
 //  - "poll interval": how often (ms) the app reconciles the overlay's visibility from the
@@ -146,6 +146,19 @@ constexpr Animation kMaxAnimation = Animation::Slide;
 
 // Store the show animation both in memory and in the INI file next to the executable.
 void SetShowAnimation(Animation animation);
+
+// The show animation duration, in milliseconds: how long the overlay takes to appear with
+// the selected animation (ignored for None). The default is the typical AnimateWindow length.
+constexpr int kMinAnimationMs     = 50;
+constexpr int kMaxAnimationMs     = 500;
+constexpr int kDefaultAnimationMs = 200;
+
+// The show animation duration in milliseconds, in [kMinAnimationMs, kMaxAnimationMs].
+[[nodiscard]] int AnimationMs();
+
+// Store the show animation duration (clamped to [kMinAnimationMs, kMaxAnimationMs]) both
+// in memory and in the INI file next to the executable.
+void SetAnimationMs(int ms);
 
 // The animation Windows itself uses to show tooltips: None when UI effects, animation
 // effects (Settings > Accessibility > Visual effects) or tooltip animation are off,

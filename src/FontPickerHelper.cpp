@@ -173,9 +173,7 @@ void OnFontSamplePaint(HWND hwnd) {
     RECT rc;
     VERIFY(GetClientRect(hwnd, &rc));
 
-    const HBRUSH brush = reinterpret_cast<HBRUSH>(
-        SendMessage(GetParent(hwnd), WM_CTLCOLORSTATIC,
-                    reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(hwnd)));
+    const HBRUSH brush = FORWARD_WM_CTLCOLORSTATIC(GetParent(hwnd), dc, hwnd, SendMessage);
     if (brush) VERIFY(FillRect(dc, &rc, brush));
     SetBkMode(dc, TRANSPARENT);
 

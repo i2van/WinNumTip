@@ -24,6 +24,7 @@ constexpr LPCTSTR kKeyRefreshMs = TEXT("RefreshIntervalMs");
 constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
 constexpr LPCTSTR kKeyStartWithWindows = TEXT("StartWithWindows");
 constexpr LPCTSTR kKeyAnimation = TEXT("Animation");
+constexpr LPCTSTR kKeyAnimationMs = TEXT("AnimationMs");
 constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
@@ -55,6 +56,9 @@ bool g_startWithWindows;
 
 // Cached show animation; mirrors the INI value.
 Preferences::Animation g_animation = Preferences::Animation::System;
+
+// Cached show animation duration in ms; mirrors the INI value.
+int g_animationMs = Preferences::kDefaultAnimationMs;
 
 // The INI name of Preferences::Animation::System, whose IDS_ANIMATION_SYSTEM drop-down text
 // is a "Windows default (%s)" format rather than a name.
@@ -190,6 +194,7 @@ void Load() {
     g_pollMs       = ReadPercent(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
     g_startWithWindows = ReadBool(kKeyStartWithWindows, false);
     g_animation = ReadAnimation();
+    g_animationMs = ReadPercent(kKeyAnimationMs, kDefaultAnimationMs, kMinAnimationMs, kMaxAnimationMs);
 
     ZeroMemory(&g_font, sizeof(g_font));
     TCHAR face[LF_FACESIZE];
@@ -283,6 +288,15 @@ void SetShowAnimation(Animation animation) {
                                                static_cast<int>(kMaxAnimation)));
     TCHAR name[16];
     WriteString(kKeyAnimation, AnimationName(g_animation, name));
+}
+
+int AnimationMs() {
+    return g_animationMs;
+}
+
+void SetAnimationMs(int ms) {
+    g_animationMs = Clamp(ms, kMinAnimationMs, kMaxAnimationMs);
+    WriteInt(kKeyAnimationMs, g_animationMs);
 }
 
 Animation SystemAnimation() {

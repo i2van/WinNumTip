@@ -46,12 +46,9 @@ RECT           g_tipRect[kMaxTips];  // each tip's own digit square (see ApplySt
 constexpr UINT_PTR kRefreshTimer = 1;
 
 // Timer id for the Fade show animation (see AnimateShow and StepFade), which steps the layered alpha from
-// 0 up to the opacity preference over kAnimationMs; started when the hidden overlay is shown
+// 0 up to the opacity preference over Preferences::AnimationMs; started when the hidden overlay is shown
 // and killed once the fade completes.
 constexpr UINT_PTR kFadeTimer = 2;
-
-// Duration of every show animation, the typical AnimateWindow length.
-constexpr DWORD kAnimationMs = 200;
 
 // GetTickCount64 at the start of the running fade.
 ULONGLONG g_fadeStart;
@@ -210,17 +207,18 @@ HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
 }
 
 // One Fade step (kFadeTimer): raise the alpha linearly with the elapsed time, landing
-// exactly on the opacity preference once kAnimationMs has passed.
+// exactly on the opacity preference once Preferences::AnimationMs has passed.
 void StepFade() {
     const ULONGLONG elapsed = GetTickCount64() - g_fadeStart;
     const BYTE target = OpacityAlpha();
-    if (elapsed >= kAnimationMs) {
+    const int duration = Preferences::AnimationMs();
+    if (elapsed >= static_cast<ULONGLONG>(duration)) {
         (void)KillTimer(g_overlay, kFadeTimer);
         VERIFY(SetLayeredWindowAttributes(g_overlay, 0, target, LWA_ALPHA));
         return;
     }
 
-    const BYTE alpha = static_cast<BYTE>(MulDiv(target, static_cast<int>(elapsed), kAnimationMs));
+    const BYTE alpha = static_cast<BYTE>(MulDiv(target, static_cast<int>(elapsed), duration));
     VERIFY(SetLayeredWindowAttributes(g_overlay, 0, alpha, LWA_ALPHA));
 }
 
@@ -489,7 +487,7 @@ void PrimeSurface() {
 // Start the selected show animation (Preferences::ShowAnimation, System resolved from the
 // Windows setting) for the hidden, fully laid-out overlay. Slide, Roll and Expand use
 // AnimateWindow -- Slide and Roll unfolding away from the taskbar's docked 'edge' -- which
-// blocks this thread for kAnimationMs (the keyboard hook has its own thread, so typing is
+// blocks this thread for Preferences::AnimationMs (the keyboard hook has its own thread, so typing is
 // never held up), after PrimeSurface. Fade is not left to AnimateWindow's AW_BLEND, which
 // ends fully opaque and strips WS_EX_LAYERED, discarding the opacity preference: it instead
 // primes alpha 0 and lets kFadeTimer ramp it up to the preference without blocking.
@@ -525,7 +523,7 @@ void PrimeSurface() {
 
     PrimeSurface();
 
-    return AnimateWindow(g_overlay, kAnimationMs, flags) != FALSE;
+    return AnimateWindow(g_overlay, static_cast<DWORD>(Preferences::AnimationMs()), flags) != FALSE;
 }
 
 // Measure tip 'i's actual digit glyph (the same character the tip loop below draws) at

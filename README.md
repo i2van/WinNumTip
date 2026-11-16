@@ -133,7 +133,12 @@ immediately.
   the effect it currently resolves to. An explicit choice is used regardless of those
   settings.
 
-  > `WinNumTip.ini` key: `Animation` (`System`, `Expand`, `Fade`, `None`, `Roll` or `Slide`)
+  The **Duration** slider next to the drop-down sets how long the effect takes: `50`-`500` ms
+  in `50` ms steps, default `200` ms; hover over or drag it to see the value. It is disabled
+  when the effect is **None**.
+
+  > `WinNumTip.ini` keys: `Animation` (`System`, `Expand`, `Fade`, `None`, `Roll` or `Slide`),
+  > `AnimationMs`
 
 - **Tip opacity** - how opaque the strip window is, as a percentage. Range `10`-`100`%,
   default `100`% (fully opaque).

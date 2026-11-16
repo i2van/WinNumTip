@@ -170,9 +170,7 @@ void OnPaint(HWND preview) {
     RECT rc;
     VERIFY(GetClientRect(preview, &rc));
 
-    const HBRUSH brush = reinterpret_cast<HBRUSH>(
-        SendMessage(GetParent(preview), WM_CTLCOLORSTATIC,
-                    reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(preview)));
+    const HBRUSH brush = FORWARD_WM_CTLCOLORSTATIC(GetParent(preview), dc, preview, SendMessage);
     if (brush) VERIFY(FillRect(dc, &rc, brush));
     SetBkMode(dc, TRANSPARENT);
 
