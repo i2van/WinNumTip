@@ -471,15 +471,30 @@ void ApplyEmpty() {
     g_snapN = 0;
 }
 
+// Paint the hidden overlay once, invisibly at alpha 0, before AnimateWindow reveals it.
+// AnimateWindow grows the window's visible region step by step, and DWM can compose a
+// frame after the region grows but before that step's content is blitted; the newly
+// exposed strip then shows the layered window's never-painted surface, which is black --
+// a dark line along the moving edge, lost on a dark bar but glaring on a light one.
+// The painted surface survives the hide and the region changes, so any such gap shows
+// the bar itself instead.
+void PrimeSurface() {
+    VERIFY(SetLayeredWindowAttributes(g_overlay, 0, 0, LWA_ALPHA));
+    ShowWindow(g_overlay, SW_SHOWNA);
+    RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    ShowWindow(g_overlay, SW_HIDE);
+    ApplyLayeredAttributes();
+}
+
 // Start the selected show animation (Preferences::ShowAnimation, System resolved from the
 // Windows setting) for the hidden, fully laid-out overlay. Slide, Roll and Expand use
 // AnimateWindow -- Slide and Roll unfolding away from the taskbar's docked 'edge' -- which
 // blocks this thread for kAnimationMs (the keyboard hook has its own thread, so typing is
-// never held up). Fade is not left to AnimateWindow's AW_BLEND, which ends fully opaque and
-// strips WS_EX_LAYERED, discarding the opacity preference: it instead primes alpha 0 and
-// lets kFadeTimer ramp it up to the preference without blocking. Returns true only when
-// AnimateWindow has already shown the window; otherwise (Fade, None, or AnimateWindow
-// failing) the caller shows it at once.
+// never held up), after PrimeSurface. Fade is not left to AnimateWindow's AW_BLEND, which
+// ends fully opaque and strips WS_EX_LAYERED, discarding the opacity preference: it instead
+// primes alpha 0 and lets kFadeTimer ramp it up to the preference without blocking.
+// Returns true only when AnimateWindow has already shown the window; otherwise (Fade,
+// None, or AnimateWindow failing) the caller shows it at once.
 [[nodiscard]] bool AnimateShow(UINT edge) {
     ApplyLayeredAttributes();   // settle a fade cut short by an empty period
 
@@ -494,21 +509,23 @@ void ApplyEmpty() {
         default:        away = AW_VER_NEGATIVE; break; // BOTTOM
     }
 
+    DWORD flags;
     switch (animation) {
         case Preferences::Animation::Fade:
             VERIFY(SetLayeredWindowAttributes(g_overlay, 0, 0, LWA_ALPHA));
             g_fadeStart = GetTickCount64();
             VERIFY(SetTimer(g_overlay, kFadeTimer, USER_TIMER_MINIMUM, nullptr));
             return false;
-        case Preferences::Animation::Slide:
-            return AnimateWindow(g_overlay, kAnimationMs, AW_SLIDE | away) != FALSE;
-        case Preferences::Animation::Roll:
-            return AnimateWindow(g_overlay, kAnimationMs, away) != FALSE;
-        case Preferences::Animation::Expand:
-            return AnimateWindow(g_overlay, kAnimationMs, AW_CENTER) != FALSE;
+        case Preferences::Animation::Slide:  flags = AW_SLIDE | away; break;
+        case Preferences::Animation::Roll:   flags = away;            break;
+        case Preferences::Animation::Expand: flags = AW_CENTER;       break;
         default:
             return false;
     }
+
+    PrimeSurface();
+
+    return AnimateWindow(g_overlay, kAnimationMs, flags) != FALSE;
 }
 
 // Measure tip 'i's actual digit glyph (the same character the tip loop below draws) at
