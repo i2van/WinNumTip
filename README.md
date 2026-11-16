@@ -91,79 +91,103 @@ immediately.
 > the dialog. In the font selector, double-click an entry in the **Font** or **Font
 > style** list to apply it the same way.
 
-- **Tip size** - how thick the numbered strip is across the taskbar: its height on a
-  horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
-  built-in strip) up to a full **Taskbar button** cell and the numbers scale to match.
+### Tip size
 
-  > `WinNumTip.ini` key: `TipSizePercent`
+How thick the numbered strip is across the taskbar: its height on a
+horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
+built-in strip) up to a full **Taskbar button** cell and the numbers scale to match.
 
-- **Tip font** - click **Select...** to pick the typeface and style (weight, italic, underline,
-  strikeout) the numbers are drawn with. When no font is chosen the taskbar's own font is used
-  (**Default**). In the font selector, click **Apply** - or double-click an entry in the
-  **Font** or **Font style** list - to save the current selection without closing the selector.
+> `WinNumTip.ini` key: `TipSizePercent`
 
-  > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
+### Tip font
 
-- **Dark theme** - draws the strip dark with light numbers. Defaults to the Windows mode
-  (**Settings** > **Personalization** > **Colors** > **Choose your default Windows mode**)
-  on the first run (no `WinNumTip.ini` yet) and on **Reset to defaults**.
+Click **Select...** to pick the typeface and style (weight, italic, underline,
+strikeout) the numbers are drawn with. When no font is chosen the taskbar's own font is used
+(**Default**). In the font selector, click **Apply** - or double-click an entry in the
+**Font** or **Font style** list - to save the current selection without closing the selector.
 
-  > `WinNumTip.ini` key: `DarkTheme`
+> `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 
-- **Compact view** - shrinks the strip's window down to a border and a small square around
-  each digit.
+### Dark theme
 
-  > `WinNumTip.ini` key: `CompactView`
+Draws the strip dark with light numbers. Defaults to the Windows mode
+(**Settings** > **Personalization** > **Colors** > **Choose your default Windows mode**)
+on the first run (no `WinNumTip.ini` yet) and on **Reset to defaults**.
 
-- **Hide border** - hides the strip's outer border or (in **Compact view** mode) each tip's
-  own border individually. Off by default (border shown).
+> `WinNumTip.ini` key: `DarkTheme`
 
-  > `WinNumTip.ini` key: `HideBorder`
+### Compact view
 
-- **Hide separator** - hides the divider lines between number tips. Off by default
-  (separators shown).
+Shrinks the strip's window down to a border and a small square around
+each digit.
 
-  > `WinNumTip.ini` key: `HideSeparator`
+> `WinNumTip.ini` key: `CompactView`
 
-- **Tip animation** - the standard Windows effect used when the strip appears (hiding is
-  always instant): **Expand** (from the center), **Fade**, **None**, or **Roll** or
-  **Slide** (unfolding away from the taskbar). The default, **Windows default**, follows the
-  system settings - none when **Animation effects** or **Fade or slide ToolTips into view**
-  is turned off, otherwise fade or slide as Windows does for tooltips; the drop-down shows
-  the effect it currently resolves to. An explicit choice is used regardless of those
-  settings.
+### Hide border
 
-  The **Duration** slider next to the drop-down sets how long the effect takes: `50`-`500` ms
-  in `50` ms steps, default `200` ms; hover over or drag it to see the value. It is disabled
-  when the effect is **None**.
+Hides the strip's outer border or (in **Compact view** mode) each tip's
+own border individually. Off by default (border shown).
 
-  > `WinNumTip.ini` keys: `Animation` (`System`, `Expand`, `Fade`, `None`, `Roll` or `Slide`),
-  > `AnimationMs`
+> `WinNumTip.ini` key: `HideBorder`
 
-- **Tip opacity** - how opaque the strip window is, as a percentage. Range `10`-`100`%,
-  default `100`% (fully opaque).
+### Hide separator
 
-  > `WinNumTip.ini` key: `OpacityPercent`
+Hides the divider lines between number tips. Off by default
+(separators shown).
 
-- **Tip refresh** - how often, in milliseconds, the numbered tips re-sync with the
-  taskbar buttons while shown, so the numbers stay aligned when a button appears,
-  disappears or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
-  but polls more often.
+> `WinNumTip.ini` key: `HideSeparator`
 
-  > `WinNumTip.ini` key: `RefreshIntervalMs`
+### Tip animation
 
-- **Win key poll** - how often, in milliseconds, the app checks the `Win` key state to show
-  or hide the strip. Range `25`-`500` ms, default `75` ms; lower reacts faster to pressing
-  or releasing `Win` but polls more often.
+The standard Windows effect used when the strip appears (hiding is
+always instant): **Expand** (from the center), **Fade**, **None**, or **Roll** or
+**Slide** (unfolding away from the taskbar). The default, **Windows default**, follows the
+system settings - none when **Animation effects** or **Fade or slide ToolTips into view**
+is turned off, otherwise fade or slide as Windows does for tooltips; the drop-down shows
+the effect it currently resolves to. An explicit choice is used regardless of those
+settings.
 
-  > `WinNumTip.ini` key: `PollIntervalMs`
+The **Duration** slider next to the drop-down sets how long the effect takes: `50`-`500` ms
+in `50` ms steps, default `200` ms; hover over or drag it to see the value. It is disabled
+when the effect is **None**.
 
-- **Start with Windows** - starts **WinNumTip** automatically for the current user.
+> `WinNumTip.ini` keys: `Animation` (`System`, `Expand`, `Fade`, `None`, `Roll` or `Slide`),
+> `AnimationMs`
 
-  > `WinNumTip.ini` key: `StartWithWindows`
+### Tip opacity
 
-- **Reset to defaults** - restores every option above to its factory default in the dialog;
-  the change is saved only if you then click **Apply** or **OK**.
+How opaque the strip window is, as a percentage. Range `10`-`100`%,
+default `100`% (fully opaque).
+
+> `WinNumTip.ini` key: `OpacityPercent`
+
+### Tip refresh
+
+How often, in milliseconds, the numbered tips re-sync with the
+taskbar buttons while shown, so the numbers stay aligned when a button appears,
+disappears or moves. Range `50`-`1000` ms, default `200` ms; lower is more responsive
+but polls more often.
+
+> `WinNumTip.ini` key: `RefreshIntervalMs`
+
+### Win key poll
+
+How often, in milliseconds, the app checks the `Win` key state to show
+or hide the strip. Range `25`-`500` ms, default `75` ms; lower reacts faster to pressing
+or releasing `Win` but polls more often.
+
+> `WinNumTip.ini` key: `PollIntervalMs`
+
+### Start with Windows
+
+Starts **WinNumTip** automatically for the current user.
+
+> `WinNumTip.ini` key: `StartWithWindows`
+
+### Reset to defaults
+
+Restores every option above to its factory default in the dialog;
+the change is saved only if you then click **Apply** or **OK**.
 
 ## Updates
 
@@ -180,7 +204,8 @@ or the [winget update](#update) instructions when **WinNumTip** was
 
 ## Troubleshooting
 
-Sometimes numbered strip does not arrear, to fix that `Alt`+`Tab` couple of times.
+1. If the numbered strip does not appear, press `Alt`+`Tab` a couple of times.
+2. If the [Preferences](#preferences) dialog looks disabled, press `Alt`+`Tab` and find the [Select Tip Font](#tip-font) dialog.
 
 ## How to build
 
