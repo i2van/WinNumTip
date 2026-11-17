@@ -15,9 +15,6 @@
          ? TRUE \
          : FALSE)
 
-#define WM_FONT_PICKER_ACTIVATE_OWNER FontPickerHelper::kActivateOwnerMessage
-#define HANDLE_WM_FONT_PICKER_ACTIVATE_OWNER(hwnd, wParam, lParam, fn) ((fn)(hwnd), 0L)
-
 namespace {
 
 // The live modal Preferences dialog, or null when none is open (enforces a single
@@ -530,16 +527,6 @@ void OnActivate(HWND /*dlg*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
     if (state != WA_INACTIVE) (void)FontPickerHelper::ActivateDialog();
 }
 
-// WM_FONT_PICKER_ACTIVATE_OWNER (posted by the helper process's font dialog when the OS
-// itself activates it -- see OnChooseFontActivate -- rather than through
-// FontPickerHelper::ActivateDialog): foreground Preferences so it isn't left behind other
-// apps. Preferences is still disabled while the font dialog is open, so this immediately
-// re-triggers OnActivate above, which hands activation straight back to the font dialog --
-// net effect, both windows come forward together with the font dialog back on top.
-void OnActivateOwner(HWND dlg) {
-    WinAPI::Dialog::Foreground(dlg);
-}
-
 // WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
 // style adds, opening the README's Preferences section (see WinAPI::Url::OpenOnContextHelp).
 void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
@@ -555,7 +542,6 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_ACTIVATE,   OnActivate);
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         HANDLE_MSG(dlg, WM_FONT_PICKER_APPLY_SELECTION, OnFontPickerApply);
-        HANDLE_MSG(dlg, WM_FONT_PICKER_ACTIVATE_OWNER, OnActivateOwner);
         case WM_SYSCOMMAND:
             // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
             // the "?" button never enters help mode; OnSysCommand forwards the commands it does
@@ -571,11 +557,9 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 namespace PreferencesDialog {
 
 // Bring Preferences and, when open, the helper process's ChooseFont dialog forward together,
-// with the font dialog ending up the active one on top. The two are unrelated top-level
-// windows (the font dialog is owned by a hidden window in the helper process, not by
-// Preferences), so without this pairing a tray-icon click / repeat open request would surface
-// only whichever one FontPickerHelper::ActivateDialog reaches, leaving the other behind other
-// apps. Returns false when Preferences is not open.
+// with the font dialog ending up the active one on top. The font dialog is owned by
+// Preferences, so foregrounding it brings Preferences along right behind it. Returns false
+// when Preferences is not open.
 bool ActivateDialog() {
     if (!g_dlg) return false;
 
@@ -594,13 +578,7 @@ bool ActivateDialog() {
     // other.
     if (GetForegroundWindow() == fontDialog) return true;
 
-    // Just hand activation to the font dialog -- FontPickerHelper::ActivateDialog's own
-    // OnActivateChooseFont slots Preferences in right behind it once the helper process
-    // genuinely holds the foreground (see there for why it has to happen on that side, not
-    // here): done from this (main) process instead, before it holds any foreground rights of
-    // its own, the same z-order move silently fails to rise above whatever app was truly
-    // foreground, while activating Preferences here first to get around that would flash it as
-    // briefly active in its own right before the font dialog retakes it.
+    // Hand activation to the font dialog; its owner, Preferences, comes forward with it.
     (void)FontPickerHelper::ActivateDialog();
     return true;
 }

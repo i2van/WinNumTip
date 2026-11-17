@@ -17,7 +17,7 @@
 namespace {
 
 constexpr LPCTSTR kHelperSwitch = TEXT("--font-picker");
-constexpr DWORD kExchangeVersion = 4;
+constexpr DWORD kExchangeVersion = 5;
 
 enum class WaitResult {
     Completed,
@@ -39,10 +39,6 @@ struct Exchange {
     LONG initialDefault;
     LONG appliedDefault;
     volatile LONG status;
-    // Set (by either side) while it is itself driving the *other* window's activation, so the
-    // WM_ACTIVATE that results doesn't bounce back as a redundant kActivateOwnerMessage --
-    // see ActivateDialog, OnActivateChooseFont and OnChooseFontActivate.
-    volatile LONG suppressOwnerActivate;
 };
 
 Exchange* g_exchange;
@@ -564,52 +560,27 @@ void OnChooseFontPaint(HWND dialog) {
         VERIFY(RedrawWindow(sample, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW));
 }
 
+// WM_WINDOWPOSCHANGING: EndDialog is about to hide the dialog. The main process disabled
+// Preferences before launching this helper, so ChooseFont's DialogBox found its owner already
+// disabled and will not re-enable it. Re-enable it here, before the hide: an owner still
+// disabled when the active dialog hides cannot take activation, so Windows would activate some
+// other application's window and Preferences would visibly blink when brought back.
+BOOL OnChooseFontWindowPosChanging(HWND dialog, LPWINDOWPOS pos) {
+    if (g_isHelperProcess && (pos->flags & SWP_HIDEWINDOW) && IsWindowVisible(dialog) &&
+        IsWindow(g_parentDialog))
+        (void)EnableWindow(g_parentDialog, TRUE);
+    return FORWARD_WM_WINDOWPOSCHANGING(dialog, pos, DefSubclassProc);
+}
+
 // WM_FONT_PICKER_ACTIVATE (posted by FontPickerHelper::ActivateDialog in the main process,
-// right after suppressOwnerActivate is set and its own SetForegroundWindow call is issued):
-// restore/raise/activate the font dialog on its own UI thread, then clear
-// suppressOwnerActivate -- this is the single place that clears it (see ActivateDialog),
-// deliberately deferred to here rather than done immediately after that SetForegroundWindow
-// call returns. That earlier point is too soon: cross-process activation isn't necessarily
-// fully delivered/dispatched on this thread by the time it returns, so clearing it there could
-// let a WM_ACTIVATE that's really just this same activation reach OnChooseFontActivate
-// unsuppressed. This message is posted strictly after that SetForegroundWindow call, so by the
-// time it is processed, any WM_ACTIVATE it generated has necessarily already been dispatched.
+// right after its own SetForegroundWindow call): restore/raise/activate the font dialog on its
+// own UI thread. The dialog is owned by Preferences, so the window manager keeps Preferences
+// directly behind it without any explicit z-order handling here.
 void OnActivateChooseFont(HWND dialog) {
     if (IsIconic(dialog)) ShowWindow(dialog, SW_RESTORE);
     SetActiveWindow(dialog);
     BringWindowToTop(dialog);
     SetForegroundWindow(dialog);
-    // Slot Preferences in immediately behind this dialog now, from this (helper) process's own
-    // thread, while it genuinely holds the foreground from the SetForegroundWindow call just
-    // above. SetWindowPos's z-order change only takes global effect -- rising above whatever
-    // window is truly foreground -- when made by a thread that already is the foreground one;
-    // called from the main process instead (before handing activation over), the same call
-    // silently fails to rise above other apps despite reporting success.
-    if (g_exchange && IsWindow(g_exchange->owner))
-        SetWindowPos(g_exchange->owner, dialog, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    if (g_exchange) g_exchange->suppressOwnerActivate = FALSE;
-}
-
-// WM_ACTIVATE: the font dialog is a top-level window with no owner link to Preferences (see
-// OnChooseFontInitDialog's comment), so the two only come forward together if told to. When
-// the OS itself activates this dialog -- Alt+Tab, its own taskbar entry, a direct click, all
-// of which bypass FontPickerHelper::ActivateDialog -- tell the owner (Preferences) to
-// foreground itself too, rather than leaving it behind other apps. Skipped while
-// suppressOwnerActivate is set, i.e. while this very activation is a side effect of
-// ActivateDialog/OnActivateChooseFont, to avoid an endless cross-process activation loop.
-//
-// Must chain to DefSubclassProc first, unlike the early-return checks below: that is what
-// runs the dialog manager's own WM_ACTIVATE handling, which restores keyboard focus to
-// whichever control was last focused in this dialog. Skipping it (as this used to) left the
-// font dialog looking active -- foreground, on top -- with no control actually holding
-// keyboard focus, which is what made activation bouncing back from Preferences look like
-// focus had moved out of the font dialog entirely.
-void OnChooseFontActivate(HWND dialog, UINT state, HWND other, BOOL minimized) {
-    FORWARD_WM_ACTIVATE(dialog, state, other, minimized, DefSubclassProc);
-    if (state == WA_INACTIVE || !g_exchange || g_exchange->suppressOwnerActivate) return;
-    if (!IsWindow(g_exchange->owner)) return;
-    WinAPI::Window::AllowSetForeground(g_exchange->owner);
-    PostMessage(g_exchange->owner, FontPickerHelper::kActivateOwnerMessage, 0, 0);
 }
 
 UINT_PTR OnChooseFontHookCommand(HWND dialog, int id, HWND /*control*/,
@@ -638,7 +609,7 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnChooseFontNcDestroy);
         HANDLE_MSG(hwnd, WM_SHOWWINDOW, OnChooseFontShowWindow);
         HANDLE_MSG(hwnd, WM_PAINT, OnChooseFontPaint);
-        HANDLE_MSG(hwnd, WM_ACTIVATE, OnChooseFontActivate);
+        HANDLE_MSG(hwnd, WM_WINDOWPOSCHANGING, OnChooseFontWindowPosChanging);
         HANDLE_MSG(hwnd, WM_FONT_PICKER_ACTIVATE, OnActivateChooseFont);
         HANDLE_MSG(hwnd, WM_SYSCOMMAND, OnChooseFontSysCommand);
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -648,11 +619,11 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam) {
     SetDialog(dialog);
 
-    // Its owner -- the hidden helper window -- has no class icon, so give the dialog itself
-    // the app icon (shared with About and Preferences) rather than showing the generic one.
+    // Give the dialog the app icon (shared with About and Preferences) rather than showing
+    // the generic one.
     DialogIcon::Set(dialog, g_inst);
 
-    // The dialog is owned by a hidden helper window, so center it over Preferences.
+    // The template has no DS_CENTER, so center the dialog over its owner, Preferences.
     if (IsWindow(g_parentDialog)) {
         RECT ownerRect;
         RECT dialogRect;
@@ -677,18 +648,6 @@ BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam)
         }
     }
     SetForegroundWindow(dialog);
-    // Belt-and-braces for the case SetForegroundWindow above is silently denied -- observed
-    // right after the Win key itself is pressed, which the shell treats as its own
-    // foreground-changing input and can invalidate the one-time AllowSetForegroundWindow grant
-    // FontPickerHelper::Open made to this freshly-launched helper process just before
-    // CreateProcess. Without this, the dialog is left wherever it was created, which can be
-    // behind Preferences; SWP_NOACTIVATE means this z-order move needs no foreground
-    // permission of its own, so -- as in OnActivateChooseFont -- it reliably keeps the dialog
-    // above Preferences (its real owner is the hidden helper window, not Preferences, so no
-    // owner/popup relationship would otherwise enforce that) regardless of who ends up truly
-    // foreground.
-    if (g_exchange && IsWindow(g_exchange->owner))
-        SetWindowPos(g_exchange->owner, dialog, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (const HWND sample = GetDlgItem(dialog, stc5)) {
         VERIFY(SetWindowSubclass(sample, FontSampleSubclassProc, kSampleSubclassId, 0));
@@ -730,10 +689,13 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     ZeroMemory(&g_dialogResult, sizeof(g_dialogResult));
     MoveMemory(&g_fallbackFont, &fallback, sizeof(g_fallbackFont));
 
-    const HWND helperOwner = CreateWindowEx(
-        WS_EX_TOOLWINDOW, TEXT("STATIC"), TEXT(""), WS_POPUP,
-        0, 0, 0, 0, nullptr, nullptr, g_inst, nullptr);
-    if (!helperOwner) return FontPickerHelper::Result::Failed;
+    // Own the dialog by the main process's Preferences window, so the window manager treats
+    // the two as one modal pair: Preferences stays disabled and directly behind the dialog,
+    // clicking Preferences or Alt+Tabbing to it activates the dialog instead, and the dialog
+    // has no separate Alt+Tab/taskbar presence of its own. The cross-process ownership
+    // attaches both threads' input queues, so the main process keeps pumping messages while
+    // it waits (see WaitForHelper).
+    if (!IsWindow(owner)) return FontPickerHelper::Result::Failed;
 
     LOGFONT font;
     MoveMemory(&font, &initial, sizeof(font));
@@ -741,7 +703,7 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     CHOOSEFONT chooseFont;
     ZeroMemory(&chooseFont, sizeof(chooseFont));
     chooseFont.lStructSize = sizeof(chooseFont);
-    chooseFont.hwndOwner = helperOwner;
+    chooseFont.hwndOwner = owner;
     chooseFont.hInstance = g_inst;
     chooseFont.lpTemplateName = kFontTemplate;
     chooseFont.lpLogFont = &font;
@@ -757,7 +719,6 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     SetDialog(nullptr);
     g_parentDialog = nullptr;
     WinAPI::GdiObject::Delete(g_sampleFont);
-    VERIFY(DestroyWindow(helperOwner));
 
     if (!chosen)
         return error == 0
@@ -867,6 +828,14 @@ bool RunIfRequested(HINSTANCE inst) {
 Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefault,
             const LOGFONT& applied, bool appliedDefault, const LOGFONT& fallback,
             LOGFONT& selected) {
+    // Open pumps messages while the helper runs, and Preferences is briefly enabled again
+    // while the helper's dialog closes, so a fast repeat click on the Font button can re-enter
+    // here. Only one font dialog at a time: bring the open one forward instead.
+    if (g_exchange) {
+        (void)ActivateDialog();
+        return Result::Cancelled;
+    }
+
     TCHAR mappingName[128];
     const LONG serial = ++g_exchangeSerial;
     WinAPI::String::Format(mappingName, TEXT(R"(Local\WinNumTipFontPicker)") APP_GUID TEXT("-%lu-%ld"),
@@ -970,9 +939,7 @@ bool ReadAppliedFont(LOGFONT& selected) {
 
 // Foreground the still-open font dialog (from the main process) and ask it to fully
 // reactivate itself on its own UI thread (OnActivateChooseFont, via the posted message
-// below). suppressOwnerActivate brackets the direct SetForegroundWindow call too: it is a
-// cross-process, same-thread-blocking call into the helper, so the WM_ACTIVATE it raises
-// there must not be echoed back as a kActivateOwnerMessage while we are the one driving it.
+// below). Its owner, Preferences, comes forward with it.
 bool ActivateDialog() {
     const HWND active = ActiveDialog();
     if (!active) return false;
@@ -984,23 +951,15 @@ bool ActivateDialog() {
     if (GetForegroundWindow() == active) return true;
 
     WinAPI::Window::AllowSetForeground(active);
-
-    // Set here, but deliberately NOT cleared here -- see OnActivateChooseFont, which clears
-    // it once the dialog has finished (re)activating on its own UI thread.
-    if (g_exchange) g_exchange->suppressOwnerActivate = TRUE;
     SetForegroundWindow(active);
-
-    const bool posted = !!PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0);
-    // If the follow-up message couldn't be queued, OnActivateChooseFont will never run to
-    // clear the flag we just set -- clear it here instead so a later genuine activation is
-    // never suppressed forever.
-    if (!posted && g_exchange) g_exchange->suppressOwnerActivate = FALSE;
-    return posted;
+    return !!PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0);
 }
 
+// A hidden dialog is treated as gone: EndDialog hides it and activates Preferences before it is
+// destroyed, and redirecting that activation back to the hidden dialog would bounce focus.
 HWND ActiveDialog() {
     const HWND active = g_exchange ? g_exchange->dialog : g_dialog;
-    return active && IsWindow(active) ? active : nullptr;
+    return active && IsWindow(active) && IsWindowVisible(active) ? active : nullptr;
 }
 
 } // namespace FontPickerHelper
