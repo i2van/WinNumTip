@@ -18,6 +18,7 @@
 #define IDS_ANIMATION_ROLL              210
 #define IDS_ANIMATION_SLIDE             211
 #define IDS_ANIMATION_DURATION          212
+#define IDS_CONFIG_LOCATION             213
 #define IDC_ABOUT_NAME                  1001
 #define IDC_ABOUT_DESC                  1002
 #define IDC_ABOUT_README                1003
@@ -55,13 +56,14 @@
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
+#define IDM_CONFIG_LOCATION             40016
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        102
-#define _APS_NEXT_COMMAND_VALUE         40001
+#define _APS_NEXT_COMMAND_VALUE         40017
 #define _APS_NEXT_CONTROL_VALUE         1035
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

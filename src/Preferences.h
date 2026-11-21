@@ -73,6 +73,12 @@ constexpr int kDefaultPollMs = 75;
 // once at startup, before the overlay is first shown.
 void Load();
 
+// Full path of the INI file next to the executable, built by Load().
+[[nodiscard]] LPCTSTR ConfigFilePath();
+
+// Whether the INI file currently exists.
+[[nodiscard]] bool ConfigFileExists();
+
 // Current tip-size percentage in [0, 100] (see the file header for its meaning).
 [[nodiscard]] int TipSizePercent();
 

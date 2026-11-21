@@ -210,6 +210,14 @@ void Load() {
     }
 }
 
+LPCTSTR ConfigFilePath() {
+    return g_iniPath;
+}
+
+bool ConfigFileExists() {
+    return IniExists();
+}
+
 int TipSizePercent() {
     return g_tipPercent;
 }

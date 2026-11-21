@@ -216,6 +216,24 @@ _Ret_z_ LPCTSTR Format(_Out_writes_z_(N) TCHAR (&buffer)[N], _In_z_ LPCTSTR form
 
 } // namespace String
 
+namespace Explorer {
+
+// Select(owner, path): open a Windows Explorer window on the folder holding 'path' with that
+// file selected, owned by 'owner'. The path is quoted so one with spaces stays a single
+// /select argument. Wrapped in VERIFY_SHELLEXEC as Url::Open is.
+inline void Select(HWND owner, LPCTSTR path) {
+    TCHAR args[MAX_PATH + 16];
+    String::Format(args, TEXT("/select,\"%s\""), path);
+    VERIFY_SHELLEXEC(::ShellExecute(owner, TEXT("open"), TEXT("explorer.exe"), args, nullptr, SW_SHOWNORMAL));
+}
+
+// Open(owner, folder): open a Windows Explorer window on 'folder', owned by 'owner'.
+inline void Open(HWND owner, LPCTSTR folder) {
+    VERIFY_SHELLEXEC(::ShellExecute(owner, TEXT("open"), folder, nullptr, nullptr, SW_SHOWNORMAL));
+}
+
+} // namespace Explorer
+
 namespace OS {
 
 // IsWindows10(): true on Windows 10 (build < 22000, the first public Windows 11

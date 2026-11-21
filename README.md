@@ -85,6 +85,10 @@ Settings are saved next to the app in `WinNumTip.ini`. Click **Apply** to save t
 without closing the dialog or **OK** to save and close; applied settings take effect
 immediately.
 
+To find settings file, open the dialog's window menu (click its title-bar icon or press
+`Alt`+`Space`) and choose **Navigate to file**: Windows Explorer opens with
+`WinNumTip.ini` selected or the app's folder when no settings have been saved yet.
+
 > [!TIP]
 > Hold `Win` to keep the strip showing, then adjust settings in **Preferences** and click
 > **Apply** to preview the change live on the taskbar without releasing `Win` or closing

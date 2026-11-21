@@ -316,6 +316,16 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     // class icon), shared with the About dialog.
     DialogIcon::Set(dlg, inst);
 
+    // Add a title-bar system-menu command that opens Explorer at the persisted config file.
+    const HMENU systemMenu = GetSystemMenu(dlg, FALSE);
+    ASSERT(systemMenu);
+    if (systemMenu) {
+        TCHAR text[48];
+        WinAPI::String::Load(inst, IDS_CONFIG_LOCATION, text);
+        VERIFY(AppendMenu(systemMenu, MF_SEPARATOR, 0, nullptr));
+        VERIFY(AppendMenu(systemMenu, MF_STRING, IDM_CONFIG_LOCATION, text));
+    }
+
     // Capture the value-readout templates from the dialog resource before the first update
     // overwrites them, and load the size readout's "Default" text from the string table.
     WinAPI::String::Load(inst, IDS_DEFAULT, g_defaultText);
@@ -527,10 +537,33 @@ void OnActivate(HWND /*dlg*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
     if (state != WA_INACTIVE) (void)FontPickerHelper::ActivateDialog();
 }
 
+// Open Explorer with the INI file selected when it exists, otherwise open the folder it
+// will be created in (the executable's).
+void NavigateToConfigFile(HWND dlg) {
+    const LPCTSTR configPath = Preferences::ConfigFilePath();
+
+    if (Preferences::ConfigFileExists()) {
+        WinAPI::Explorer::Select(dlg, configPath);
+        return;
+    }
+
+    TCHAR folder[MAX_PATH];
+    WinAPI::String::Copy(folder, configPath);
+    // A bare file name (no directory) means the INI lives in the current directory.
+    *PathFindFileName(folder) = TEXT('\0');
+    if (!folder[0]) WinAPI::String::Copy(folder, TEXT("."));
+    WinAPI::Explorer::Open(dlg, folder);
+}
+
 // WM_SYSCOMMAND: intercept the title-bar "?" (context-help) button that the DS_CONTEXTHELP
 // style adds, opening the README's Preferences section (see WinAPI::Url::OpenOnContextHelp).
+// The custom IDM_CONFIG_LOCATION system-menu command navigates to the INI file instead; its
+// id keeps the low four bits clear, as those are reserved for the system (hence the mask).
 void OnSysCommand(HWND dlg, UINT cmd, int x, int y) {
-    WinAPI::Url::OpenOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md#preferences"));
+    if ((cmd & 0xFFF0) == IDM_CONFIG_LOCATION)
+        NavigateToConfigFile(dlg);
+    else
+        WinAPI::Url::OpenOnContextHelp(dlg, cmd, x, y, TEXT("https://github.com/i2van/WinNumTip/blob/main/README.md#preferences"));
 }
 
 INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {

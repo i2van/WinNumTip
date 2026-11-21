@@ -240,6 +240,7 @@ BEGIN
     IDS_ANIMATION_ROLL      "Roll"
     IDS_ANIMATION_SLIDE     "Slide"
     IDS_ANIMATION_DURATION  "%d ms"
+    IDS_CONFIG_LOCATION     "&Navigate to file"
 END
 
 #endif    // Neutral resources
