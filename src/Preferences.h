@@ -38,8 +38,8 @@
 //   100                    -> a full taskbar-button-sized cell,
 // scaled linearly in between (and the number text scales with it). The strip is never
 // thinner than the default, so the Preferences dialog only offers percentages from the
-// default's share up to 100. A fresh INI (0) therefore renders as the default. The
-// default's share is computed from the live taskbar via Overlay::TipSizeBounds; see
+// default's share up to 100. A fresh INI uses kDefaultTipSizePercent. The default's
+// share is computed from the live taskbar via Overlay::TipSizeBounds; see
 // Overlay::Refresh.
 namespace Preferences {
 
@@ -47,6 +47,7 @@ namespace Preferences {
 // [kMinPercent, kMaxPercent] of a full taskbar-button thickness.
 constexpr int kMinPercent = 0;
 constexpr int kMaxPercent = 100;
+constexpr int kDefaultTipSizePercent = 80;
 
 // The overlay opacity percentage: how opaque the overlay window is, applied as its
 // layered-window alpha (100 = fully opaque, unchanged from the pre-opacity behavior).

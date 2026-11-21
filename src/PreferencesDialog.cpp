@@ -482,7 +482,7 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
 }
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
-// dialog's controls to their factory defaults -- the slim "Default" strip, no render
+// dialog's controls to their factory defaults -- the default tip size, no render
 // flags set (dark theme following the Windows mode, border/separator shown, not compact), the
 // Windows default animation at the default duration, start with Windows off, and the fallback (taskbar) font. Only the
 // controls are reset here; the change is persisted only
@@ -494,7 +494,7 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     }
 
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-        WinAPI::TrackBar::SetPos(dlg, IDC_SIZE_SLIDER, g_minPct);
+        WinAPI::TrackBar::SetPos(dlg, IDC_SIZE_SLIDER, max(g_minPct, Preferences::kDefaultTipSizePercent));
         WinAPI::TrackBar::SetPos(dlg, IDC_OPACITY_SLIDER, Preferences::kDefaultOpacityPercent);
         WinAPI::TrackBar::SetPos(dlg, IDC_REFRESH_SLIDER, Preferences::kDefaultRefreshMs);
         WinAPI::TrackBar::SetPos(dlg, IDC_POLL_SLIDER, Preferences::kDefaultPollMs);

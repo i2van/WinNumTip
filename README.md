@@ -26,7 +26,7 @@ position - **WinNumTip** just reminds you which number is which.
 - Numbered tips over taskbar buttons while the `Win` key is held.
 - Works with the taskbar docked on any edge.
 - Adjustable tip size via the notification area icon's [Preferences](#preferences) dialog - from the
-  default slim strip up to the full taskbar-button size (tip height for a
+  slim built-in strip up to the full taskbar-button size (tip height for a
   horizontal taskbar, tip width for a vertical one); the numbers scale to match.
 - Adjustable tip font, dark theme, compact view, independent border/separator hiding,
   show animation, tip opacity and tunable refresh/`Win` key poll intervals.
@@ -100,6 +100,7 @@ To find settings file, open the dialog's window menu (click its title-bar icon o
 How thick the numbered strip is across the taskbar: its height on a
 horizontal taskbar, its width on a side-docked one. Ranges from **Default** (the slim
 built-in strip) up to a full **Taskbar button** cell and the numbers scale to match.
+`80`% by default.
 
 > `WinNumTip.ini` key: `TipSizePercent`
 

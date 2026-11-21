@@ -31,7 +31,7 @@ constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
 TCHAR g_iniPath[MAX_PATH];
 
 // Cached tip-size percentage in [0, 100]; mirrors the INI value.
-int g_tipPercent;
+int g_tipPercent = Preferences::kDefaultTipSizePercent;
 
 // Cached opacity percentage; mirrors the INI value.
 int g_opacityPercent = Preferences::kDefaultOpacityPercent;
@@ -179,7 +179,7 @@ namespace Preferences {
 
 void Load() {
     BuildIniPath();
-    const int legacyTipPercent = ReadPercent(kLegacyKeyTipSize, 0);
+    const int legacyTipPercent = ReadPercent(kLegacyKeyTipSize, kDefaultTipSizePercent);
     g_tipPercent = ReadPercent(kKeyTipSize, legacyTipPercent);
     g_opacityPercent = ReadPercent(kKeyOpacity, kDefaultOpacityPercent, kMinOpacityPercent, kMaxOpacityPercent);
     // No INI yet (first run): follow the Windows system mode. Otherwise use the saved
