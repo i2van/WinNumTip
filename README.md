@@ -110,6 +110,9 @@ Click **Select...** to pick the typeface and style (weight, italic, underline,
 strikeout) the numbers are drawn with. When no font is chosen the taskbar's own font is used
 (**Default**). In the font selector, click **Apply** - or double-click an entry in the
 **Font** or **Font style** list - to save the current selection without closing the selector.
+The selector opens next to **Preferences** (centered over it when there is no room on either
+side), leaves **Preferences** usable, and closes along with it, discarding any selection not
+yet applied.
 
 > `WinNumTip.ini` keys: `FontFace`, `FontWeight`, `FontItalic`, `FontUnderline`, `FontStrikeOut`
 
@@ -209,8 +212,7 @@ or the [winget update](#update) instructions when **WinNumTip** was
 
 ## Troubleshooting
 
-1. If the numbered strip does not appear, press `Alt`+`Tab` a couple of times.
-2. If the [Preferences](#preferences) dialog looks disabled, press `Alt`+`Tab` and find the [Select Tip Font](#tip-font) dialog.
+If the numbered strip does not appear, press `Alt`+`Tab` a couple of times.
 
 ## How to build
 

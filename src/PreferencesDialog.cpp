@@ -14,6 +14,8 @@
     ((fn)((hwnd), static_cast<FontPickerHelper::Result>(static_cast<LONG>(wParam))) \
          ? TRUE \
          : FALSE)
+#define WM_FONT_PICKER_CLOSED FontPickerHelper::kClosedMessage
+#define HANDLE_WM_FONT_PICKER_CLOSED(hwnd, wParam, lParam, fn) ((fn)((hwnd), (wParam)), TRUE)
 
 namespace {
 
@@ -421,6 +423,8 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
     switch (id) {
         case IDOK:
             SaveValues(dlg);
+            // The font dialog closes with Preferences, discarding its unapplied selection.
+            FontPicker::Close();
             VERIFY(EndDialog(dlg, IDOK));
             break;
         case IDC_APPLY: {
@@ -437,7 +441,6 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
             [[fallthrough]];
         case IDC_FONT_BUTTON:
             FontPicker::Open(dlg);
-            UpdateApplyState(dlg);
             break;
         case IDC_COMPACT_VIEW:
             if (notify == BN_CLICKED) UpdateCompactVisibility(dlg);
@@ -454,9 +457,16 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
             UpdateApplyState(dlg);
             break;
         case IDCANCEL:
+            FontPicker::Close();
             VERIFY(EndDialog(dlg, IDCANCEL));
             break;
     }
+}
+
+// The font dialog closed: adopt its OK selection, if any (see FontPicker::OnClosed).
+void OnFontPickerClosed(HWND dlg, WPARAM session) {
+    FontPicker::OnClosed(dlg, session);
+    UpdateApplyState(dlg);
 }
 
 [[nodiscard]] bool OnFontPickerApply(HWND dlg, FontPickerHelper::Result result) {
@@ -521,7 +531,8 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     return FALSE;
 }
 
-// Release the font-picker resources (preview + sample fonts) as the dialog closes.
+// Release the font-picker resources (preview + sample fonts, and the font dialog should it
+// still be open) as the dialog closes.
 void OnDestroy(HWND /*dlg*/) {
     // The tooltips are owned by the dialog, so Windows destroys them along with it.
     g_hoverTip = nullptr;
@@ -529,12 +540,6 @@ void OnDestroy(HWND /*dlg*/) {
     g_dragTipActive = false;
     g_hoverTipShown = false;
     FontPicker::Cleanup();
-}
-
-// If shell/menu activation lands on the disabled Preferences dialog while the helper font
-// dialog is open, redirect activation back to the helper on its own UI thread.
-void OnActivate(HWND /*dlg*/, UINT state, HWND /*other*/, BOOL /*minimized*/) {
-    if (state != WA_INACTIVE) (void)FontPickerHelper::ActivateDialog();
 }
 
 // Open Explorer with the INI file selected when it exists, otherwise open the folder it
@@ -572,9 +577,9 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_HSCROLL,    OnHScroll);
         HANDLE_MSG(dlg, WM_COMMAND,    OnCommand);
         HANDLE_MSG(dlg, WM_NOTIFY,     OnNotify);
-        HANDLE_MSG(dlg, WM_ACTIVATE,   OnActivate);
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         HANDLE_MSG(dlg, WM_FONT_PICKER_APPLY_SELECTION, OnFontPickerApply);
+        HANDLE_MSG(dlg, WM_FONT_PICKER_CLOSED, OnFontPickerClosed);
         case WM_SYSCOMMAND:
             // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
             // the "?" button never enters help mode; OnSysCommand forwards the commands it does
@@ -590,9 +595,10 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 namespace PreferencesDialog {
 
 // Bring Preferences and, when open, the helper process's ChooseFont dialog forward together,
-// with the font dialog ending up the active one on top. The font dialog is owned by
-// Preferences, so foregrounding it brings Preferences along right behind it. Returns false
-// when Preferences is not open.
+// with the font dialog ending up the active one on top. Foregrounding an owned window does not
+// raise its owner, so Preferences is foregrounded first -- which raises the font dialog it owns
+// along with it -- and only then is the font dialog activated. Returns false when Preferences
+// is not open.
 bool ActivateDialog() {
     if (!g_dlg) return false;
 
@@ -605,23 +611,24 @@ bool ActivateDialog() {
         return true;
     }
 
-    // Skip entirely once the font dialog is already foreground: this is called from several
-    // overlapping paths (WM_NOTIFYICON's own click handling, Show's repeat-open request, ...),
-    // and a tray-icon click/double-click can drive several of them within milliseconds of each
-    // other.
+    // Skip entirely once the font dialog is already foreground: a tray-icon double-click
+    // delivers two button-ups within milliseconds of each other.
     if (GetForegroundWindow() == fontDialog) return true;
 
-    // Hand activation to the font dialog; its owner, Preferences, comes forward with it.
+    SetForegroundWindow(g_dlg);
     (void)FontPickerHelper::ActivateDialog();
     return true;
 }
 
 INT_PTR Show(HINSTANCE inst, HWND owner) {
-    // Only one Preferences dialog at a time: if it's already up, bring both it and, when
-    // present, the helper process's ChooseFont dialog to the foreground. Report IDCANCEL
-    // since no new choice was made.
+    // Only one Preferences dialog at a time: if it's already up, make it the active window
+    // -- even over an open ChooseFont dialog, which, being owned by Preferences, is raised
+    // along with it -- unless a popup of its own (e.g. a message box) is up over it. Report
+    // IDCANCEL since no new choice was made.
     if (g_dlg) {
-        (void)ActivateDialog();
+        HWND target = GetLastActivePopup(g_dlg);
+        if (target == FontPickerHelper::ActiveDialog()) target = g_dlg;
+        if (GetForegroundWindow() != target) WinAPI::Dialog::Foreground(g_dlg, target);
         return IDCANCEL;
     }
     // The trackbar common-control class is registered once at startup (InitCommonControlsEx

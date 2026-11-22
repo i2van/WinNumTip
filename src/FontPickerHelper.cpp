@@ -13,17 +13,17 @@
           static_cast<UINT>(HIWORD(wParam))))
 #define WM_FONT_PICKER_ACTIVATE (WM_APP + 0x100)
 #define HANDLE_WM_FONT_PICKER_ACTIVATE(hwnd, wParam, lParam, fn) ((fn)(hwnd), 0L)
+#define WM_FONT_PICKER_SYNC_APPLIED (WM_APP + 0x103)
+#define HANDLE_WM_FONT_PICKER_SYNC_APPLIED(hwnd, wParam, lParam, fn) ((fn)(hwnd), 0L)
 
 namespace {
 
 constexpr LPCTSTR kHelperSwitch = TEXT("--font-picker");
 constexpr DWORD kExchangeVersion = 5;
 
-enum class WaitResult {
-    Completed,
-    Quitting,
-    Failed,
-};
+// How long Close waits for a terminated helper to go away, so its dialog does not outlive
+// Preferences on screen.
+constexpr DWORD kCloseWaitMs = 1000;
 
 // Page-file-backed shared state exchanged with the short-lived helper process.
 struct Exchange {
@@ -45,6 +45,19 @@ Exchange* g_exchange;
 HWND g_dialog;
 LONG g_exchangeSerial;
 bool g_isHelperProcess;
+
+// Main-process state for the open helper session (see FontPickerHelper::Open). g_session is
+// read by the thread-pool wait callback, so it changes only while no wait is registered.
+struct Session {
+    HWND owner;
+    LONG serial;
+};
+
+Session g_session;
+HINSTANCE g_sessionInst;
+HANDLE g_mapping;
+HANDLE g_process;
+HANDLE g_processWait;
 
 // Helper-side state for the live ChooseFont dialog. g_lastAppliedFont/g_lastAppliedDefault
 // track the owner's persisted font -- seeded from it, then advanced by each Apply -- so the
@@ -381,6 +394,15 @@ void SetChooseFontApplyEnabled(HWND dialog, bool enabled) {
     WinAPI::Window::Enable(apply, enabled);
 }
 
+// Adopt the owner's persisted font, as last published to the exchange (see
+// FontPickerHelper::SetApplied), as the Apply baseline.
+void SyncAppliedFont() {
+    if (!g_exchange) return;
+    MemoryBarrier();
+    MoveMemory(&g_lastAppliedFont, &g_exchange->applied, sizeof(g_lastAppliedFont));
+    g_lastAppliedDefault = g_exchange->appliedDefault != 0;
+}
+
 void UpdateChooseFontApplyState(HWND dialog) {
     LOGFONT selected;
     WinAPI::ChooseFont::GetLogFont(dialog, selected);
@@ -543,6 +565,11 @@ void OnChooseFontNcDestroy(HWND dialog) {
 void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
     FORWARD_WM_SHOWWINDOW(dialog, show, status, DefSubclassProc);
     if (show) {
+        // Make the dialog modeless: ChooseFont's DialogBox has disabled its owner,
+        // Preferences, by the time it shows the dialog, so enable it again. EndDialog still
+        // re-enables it as usual (it disabled it), which is harmless now.
+        if (g_isHelperProcess && IsWindow(g_parentDialog))
+            (void)EnableWindow(g_parentDialog, TRUE);
         RefreshChooseFontSample(dialog);
         UpdateChooseFontApplyState(dialog);
     }
@@ -560,18 +587,6 @@ void OnChooseFontPaint(HWND dialog) {
         VERIFY(RedrawWindow(sample, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW));
 }
 
-// WM_WINDOWPOSCHANGING: EndDialog is about to hide the dialog. The main process disabled
-// Preferences before launching this helper, so ChooseFont's DialogBox found its owner already
-// disabled and will not re-enable it. Re-enable it here, before the hide: an owner still
-// disabled when the active dialog hides cannot take activation, so Windows would activate some
-// other application's window and Preferences would visibly blink when brought back.
-BOOL OnChooseFontWindowPosChanging(HWND dialog, LPWINDOWPOS pos) {
-    if (g_isHelperProcess && (pos->flags & SWP_HIDEWINDOW) && IsWindowVisible(dialog) &&
-        IsWindow(g_parentDialog))
-        (void)EnableWindow(g_parentDialog, TRUE);
-    return FORWARD_WM_WINDOWPOSCHANGING(dialog, pos, DefSubclassProc);
-}
-
 // WM_FONT_PICKER_ACTIVATE (posted by FontPickerHelper::ActivateDialog in the main process,
 // right after its own SetForegroundWindow call): restore/raise/activate the font dialog on its
 // own UI thread. The dialog is owned by Preferences, so the window manager keeps Preferences
@@ -581,6 +596,13 @@ void OnActivateChooseFont(HWND dialog) {
     SetActiveWindow(dialog);
     BringWindowToTop(dialog);
     SetForegroundWindow(dialog);
+}
+
+// WM_FONT_PICKER_SYNC_APPLIED (posted by FontPickerHelper::SetApplied): Preferences saved a
+// font, so re-measure the Apply button against it.
+void OnSyncAppliedFont(HWND dialog) {
+    SyncAppliedFont();
+    UpdateChooseFontApplyState(dialog);
 }
 
 UINT_PTR OnChooseFontHookCommand(HWND dialog, int id, HWND /*control*/,
@@ -609,44 +631,103 @@ LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnChooseFontNcDestroy);
         HANDLE_MSG(hwnd, WM_SHOWWINDOW, OnChooseFontShowWindow);
         HANDLE_MSG(hwnd, WM_PAINT, OnChooseFontPaint);
-        HANDLE_MSG(hwnd, WM_WINDOWPOSCHANGING, OnChooseFontWindowPosChanging);
         HANDLE_MSG(hwnd, WM_FONT_PICKER_ACTIVATE, OnActivateChooseFont);
+        HANDLE_MSG(hwnd, WM_FONT_PICKER_SYNC_APPLIED, OnSyncAppliedFont);
         HANDLE_MSG(hwnd, WM_SYSCOMMAND, OnChooseFontSysCommand);
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 }
 
+// The widths of 'window's invisible DWM borders: GetWindowRect includes them but nothing is
+// drawn there, so windows abutted by their window rects alone would show a gap between them.
+[[nodiscard]] RECT InvisibleBorders(HWND window) {
+    RECT borders = { 0, 0, 0, 0 };
+    RECT bounds;
+    RECT frame;
+    if (GetWindowRect(window, &bounds) &&
+        SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
+                                        sizeof(frame)))) {
+        borders.left   = frame.left - bounds.left;
+        borders.top    = frame.top - bounds.top;
+        borders.right  = bounds.right - frame.right;
+        borders.bottom = bounds.bottom - frame.bottom;
+    }
+    return borders;
+}
+
+// Place 'dialog' beside 'owner' -- on its right, else on its left -- top-aligned with it but
+// kept within the owner's monitor work area. Returns false, leaving 'dialog' where it is,
+// when neither side has room for it.
+[[nodiscard]] bool PlaceBesideOwner(HWND dialog, HWND owner) {
+    RECT ownerRect;
+    RECT dialogRect;
+    if (!GetWindowRect(owner, &ownerRect) || !GetWindowRect(dialog, &dialogRect)) return false;
+
+    MONITORINFO monitor;
+    monitor.cbSize = sizeof(monitor);
+    if (!GetMonitorInfo(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitor))
+        return false;
+    const RECT& work = monitor.rcWork;
+
+    // Work with the visible frames. Both dialogs have the same frame style, so the owner's
+    // invisible borders stand in for the dialog's, which DWM does not report before it shows.
+    const RECT borders = InvisibleBorders(owner);
+    const int ownerLeft  = ownerRect.left + borders.left;
+    const int ownerRight = ownerRect.right - borders.right;
+    const int ownerTop   = ownerRect.top + borders.top;
+    const int width  = dialogRect.right - dialogRect.left - borders.left - borders.right;
+    const int height = dialogRect.bottom - dialogRect.top - borders.top - borders.bottom;
+    if (height > work.bottom - work.top) return false;
+
+    int x;
+    if (ownerRight >= work.left && ownerRight + width <= work.right)
+        x = ownerRight;
+    else if (ownerLeft <= work.right && ownerLeft - width >= work.left)
+        x = ownerLeft - width;
+    else
+        return false;
+    const int y = max(static_cast<int>(work.top), min(ownerTop, static_cast<int>(work.bottom) - height));
+
+    return !!SetWindowPos(dialog, nullptr, x - borders.left, y - borders.top, 0, 0,
+                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+// Center 'dialog' over 'owner', kept within the owner's monitor work area.
+void CenterOverOwner(HWND dialog, HWND owner) {
+    RECT ownerRect;
+    RECT dialogRect;
+    if (!GetWindowRect(owner, &ownerRect) || !GetWindowRect(dialog, &dialogRect)) return;
+
+    const int width = dialogRect.right - dialogRect.left;
+    const int height = dialogRect.bottom - dialogRect.top;
+    int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2;
+    int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2;
+
+    MONITORINFO monitor;
+    monitor.cbSize = sizeof(monitor);
+    if (GetMonitorInfo(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        x = max(x, monitor.rcWork.left);
+        y = max(y, monitor.rcWork.top);
+        x = min(x, monitor.rcWork.right - width);
+        y = min(y, monitor.rcWork.bottom - height);
+    }
+    SetWindowPos(dialog, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam) {
     SetDialog(dialog);
+    // A font saved after launch but before the dialog was published above found no dialog
+    // to notify (see FontPickerHelper::SetApplied), so pick it up here.
+    SyncAppliedFont();
 
     // Give the dialog the app icon (shared with About and Preferences) rather than showing
     // the generic one.
     DialogIcon::Set(dialog, g_inst);
 
-    // The template has no DS_CENTER, so center the dialog over its owner, Preferences.
-    if (IsWindow(g_parentDialog)) {
-        RECT ownerRect;
-        RECT dialogRect;
-        if (GetWindowRect(g_parentDialog, &ownerRect) &&
-            GetWindowRect(dialog, &dialogRect)) {
-            const int width = dialogRect.right - dialogRect.left;
-            const int height = dialogRect.bottom - dialogRect.top;
-            int x = ownerRect.left + ((ownerRect.right - ownerRect.left) - width) / 2;
-            int y = ownerRect.top + ((ownerRect.bottom - ownerRect.top) - height) / 2;
-
-            MONITORINFO monitor;
-            monitor.cbSize = sizeof(monitor);
-            if (GetMonitorInfo(
-                    MonitorFromWindow(g_parentDialog, MONITOR_DEFAULTTONEAREST), &monitor)) {
-                x = max(x, monitor.rcWork.left);
-                y = max(y, monitor.rcWork.top);
-                x = min(x, monitor.rcWork.right - width);
-                y = min(y, monitor.rcWork.bottom - height);
-            }
-            SetWindowPos(dialog, nullptr, x, y, 0, 0,
-                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-    }
+    // The dialog is modeless, so open it beside its owner, Preferences, leaving that in view
+    // and usable; when neither side has room, center it over Preferences instead.
+    if (IsWindow(g_parentDialog) && !PlaceBesideOwner(dialog, g_parentDialog))
+        CenterOverOwner(dialog, g_parentDialog);
     SetForegroundWindow(dialog);
 
     if (const HWND sample = GetDlgItem(dialog, stc5)) {
@@ -689,12 +770,10 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     ZeroMemory(&g_dialogResult, sizeof(g_dialogResult));
     MoveMemory(&g_fallbackFont, &fallback, sizeof(g_fallbackFont));
 
-    // Own the dialog by the main process's Preferences window, so the window manager treats
-    // the two as one modal pair: Preferences stays disabled and directly behind the dialog,
-    // clicking Preferences or Alt+Tabbing to it activates the dialog instead, and the dialog
-    // has no separate Alt+Tab/taskbar presence of its own. The cross-process ownership
-    // attaches both threads' input queues, so the main process keeps pumping messages while
-    // it waits (see WaitForHelper).
+    // Own the dialog by the main process's Preferences window, so it stays above Preferences
+    // and has no separate Alt+Tab/taskbar presence of its own. The dialog is modeless with
+    // respect to Preferences (see OnChooseFontShowWindow), and the main process does not wait
+    // for it: it learns of the helper's exit through a thread-pool wait (see Open).
     if (!IsWindow(owner)) return FontPickerHelper::Result::Failed;
 
     LOGFONT font;
@@ -731,42 +810,39 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         : FontPickerHelper::Result::Chosen;
 }
 
-[[nodiscard]] WaitResult WaitForHelper(HANDLE process) {
-    bool repostQuit = false;
-    int quitCode = 0;
-
-    for (;;) {
-        const DWORD wait = MsgWaitForMultipleObjects(1, &process, FALSE, INFINITE, QS_ALLINPUT);
-        if (wait == WAIT_OBJECT_0) break;
-        if (wait != WAIT_OBJECT_0 + 1) {
-            VERIFY(TerminateProcess(process, ERROR_GEN_FAILURE));
-            VERIFY(WaitForSingleObject(process, INFINITE) == WAIT_OBJECT_0);
-            return WaitResult::Failed;
-        }
-
-        MSG msg;
-        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT) {
-                if (!repostQuit) {
-                    repostQuit = true;
-                    quitCode = static_cast<int>(msg.wParam);
-                    VERIFY(TerminateProcess(process, ERROR_CANCELLED));
-                }
-                continue;
-            }
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
-
-    if (repostQuit) PostQuitMessage(quitCode);
-    return repostQuit ? WaitResult::Quitting : WaitResult::Completed;
-}
-
 void ShowError(HINSTANCE inst, HWND owner) {
     TCHAR text[96], caption[32];
     MessageBox(owner, WinAPI::String::Load(inst, IDS_FONT_PICKER_ERROR, text),
                WinAPI::String::Load(inst, IDS_APP_NAME, caption), MB_OK | MB_ICONERROR);
+}
+
+// Thread-pool callback: the helper process exited, so tell its owner to collect the result.
+VOID CALLBACK OnHelperExited(PVOID context, BOOLEAN /*timedOut*/) {
+    const Session* const session = static_cast<const Session*>(context);
+    (void)PostMessage(session->owner, FontPickerHelper::kClosedMessage,
+                      static_cast<WPARAM>(session->serial), 0);
+}
+
+// Release the main process's handles to the helper session. Unregistering blocks until a
+// running OnHelperExited callback has returned, so g_session is free to change afterwards.
+void ReleaseSession() {
+    if (g_processWait) {
+        VERIFY(UnregisterWaitEx(g_processWait, INVALID_HANDLE_VALUE));
+        g_processWait = nullptr;
+    }
+    if (g_process) {
+        VERIFY(CloseHandle(g_process));
+        g_process = nullptr;
+    }
+    if (g_exchange) {
+        VERIFY(UnmapViewOfFile(g_exchange));
+        g_exchange = nullptr;
+    }
+    if (g_mapping) {
+        VERIFY(CloseHandle(g_mapping));
+        g_mapping = nullptr;
+    }
+    g_session.owner = nullptr;
 }
 
 } // namespace
@@ -825,15 +901,12 @@ bool RunIfRequested(HINSTANCE inst) {
     return true;
 }
 
-Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefault,
-            const LOGFONT& applied, bool appliedDefault, const LOGFONT& fallback,
-            LOGFONT& selected) {
-    // Open pumps messages while the helper runs, and Preferences is briefly enabled again
-    // while the helper's dialog closes, so a fast repeat click on the Font button can re-enter
-    // here. Only one font dialog at a time: bring the open one forward instead.
+bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefault,
+          const LOGFONT& applied, bool appliedDefault, const LOGFONT& fallback) {
+    // Only one font dialog at a time: bring the open one forward instead.
     if (g_exchange) {
         (void)ActivateDialog();
-        return Result::Cancelled;
+        return false;
     }
 
     TCHAR mappingName[128];
@@ -846,7 +919,7 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
     if (!mapping || GetLastError() == ERROR_ALREADY_EXISTS) {
         if (mapping) CloseHandle(mapping);
         ShowError(inst, owner);
-        return Result::Failed;
+        return false;
     }
 
     Exchange* const exchange = static_cast<Exchange*>(
@@ -854,7 +927,7 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
     if (!exchange) {
         CloseHandle(mapping);
         ShowError(inst, owner);
-        return Result::Failed;
+        return false;
     }
 
     ZeroMemory(exchange, sizeof(*exchange));
@@ -874,7 +947,7 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
         VERIFY(UnmapViewOfFile(exchange));
         VERIFY(CloseHandle(mapping));
         ShowError(inst, owner);
-        return Result::Failed;
+        return false;
     }
     WinAPI::String::Format(commandLine, TEXT("\"%s\" %s \"%s\""), exe, kHelperSwitch, mappingName);
 
@@ -884,51 +957,78 @@ Result Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefa
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
 
-    g_exchange = exchange;
-    (void)EnableWindow(owner, FALSE);
     const BOOL started = CreateProcess(exe, commandLine, nullptr, nullptr, FALSE, 0,
                                        nullptr, nullptr, &si, &pi);
     if (!started) {
-        (void)EnableWindow(owner, TRUE);
-        g_exchange = nullptr;
         VERIFY(UnmapViewOfFile(exchange));
         VERIFY(CloseHandle(mapping));
         ShowError(inst, owner);
-        return Result::Failed;
+        return false;
     }
 
     VERIFY(CloseHandle(pi.hThread));
     AllowSetForegroundWindow(pi.dwProcessId);
-    const WaitResult waitResult = WaitForHelper(pi.hProcess);
-    if (IsWindow(owner)) {
-        (void)EnableWindow(owner, TRUE);
-        if (waitResult != WaitResult::Quitting) {
-            SetActiveWindow(owner);
-            SetForegroundWindow(owner);
-        }
+
+    g_exchange = exchange;
+    g_mapping = mapping;
+    g_process = pi.hProcess;
+    g_sessionInst = inst;
+    g_session.owner = owner;
+    g_session.serial = serial;
+    if (!RegisterWaitForSingleObject(&g_processWait, g_process, OnHelperExited, &g_session,
+                                     INFINITE, WT_EXECUTEONLYONCE)) {
+        g_processWait = nullptr;
+        VERIFY(TerminateProcess(g_process, ERROR_GEN_FAILURE));
+        ReleaseSession();
+        ShowError(inst, owner);
+        return false;
     }
-    VERIFY(CloseHandle(pi.hProcess));
-    g_exchange = nullptr;
+    return true;
+}
 
-    Result result = static_cast<Result>(exchange->status);
-    bool showError = waitResult == WaitResult::Failed;
-    if (waitResult == WaitResult::Quitting) {
-        result = Result::Cancelled;
-    } else if (waitResult == WaitResult::Completed) {
-        if (result == Result::Chosen)
-            MoveMemory(&selected, &exchange->font, sizeof(selected));
-        else if (result == Result::Failed || result == Result::Pending)
-            showError = true;
-    }
+Result Complete(WPARAM session, LOGFONT& selected) {
+    if (!g_exchange || g_isHelperProcess || static_cast<LONG>(session) != g_session.serial)
+        return Result::Pending;
 
-    VERIFY(UnmapViewOfFile(exchange));
-    VERIFY(CloseHandle(mapping));
+    const Result result = static_cast<Result>(g_exchange->status);
+    if (result == Result::Chosen)
+        MoveMemory(&selected, &g_exchange->font, sizeof(selected));
+    const HWND owner = g_session.owner;
+    const HINSTANCE inst = g_sessionInst;
+    ReleaseSession();
 
-    if (showError) {
+    if (result == Result::Failed || result == Result::Pending) {
         ShowError(inst, owner);
         return Result::Failed;
     }
     return result;
+}
+
+void Close() {
+    if (!g_exchange || g_isHelperProcess) return;
+
+    // Unregister first, so the exit this causes posts no kClosedMessage; any already posted
+    // is recognized as stale by Complete. TerminateProcess fails harmlessly when the helper
+    // has already exited on its own.
+    if (g_processWait) {
+        VERIFY(UnregisterWaitEx(g_processWait, INVALID_HANDLE_VALUE));
+        g_processWait = nullptr;
+    }
+    (void)TerminateProcess(g_process, ERROR_CANCELLED);
+    (void)WaitForSingleObject(g_process, kCloseWaitMs);
+    ReleaseSession();
+}
+
+void SetApplied(const LOGFONT& applied, bool appliedDefault) {
+    if (!g_exchange || g_isHelperProcess) return;
+
+    MoveMemory(&g_exchange->applied, &applied, sizeof(g_exchange->applied));
+    g_exchange->appliedDefault = appliedDefault ? TRUE : FALSE;
+    // Pairs with the helper's publish-then-read in OnChooseFontInitDialog: either it reads
+    // this font there, or the dialog is visible here and is told to re-read it.
+    MemoryBarrier();
+    if (const HWND dialog = g_exchange->dialog)
+        (void)PostMessage(dialog, WM_FONT_PICKER_SYNC_APPLIED, 0, 0);
 }
 
 bool ReadAppliedFont(LOGFONT& selected) {
@@ -939,15 +1039,14 @@ bool ReadAppliedFont(LOGFONT& selected) {
 
 // Foreground the still-open font dialog (from the main process) and ask it to fully
 // reactivate itself on its own UI thread (OnActivateChooseFont, via the posted message
-// below). Its owner, Preferences, comes forward with it.
+// below). PreferencesDialog::ActivateDialog raises its owner, Preferences, first.
 bool ActivateDialog() {
     const HWND active = ActiveDialog();
     if (!active) return false;
 
-    // Skip if already foreground: this is called from several overlapping paths (Preferences'
-    // own WM_ACTIVATE handler, PreferencesDialog::ActivateDialog's explicit follow-up call,
-    // ...), and a tray-icon click/double-click can drive several of them within milliseconds
-    // of each other.
+    // Skip if already foreground: this is called from several overlapping paths
+    // (PreferencesDialog::ActivateDialog, a repeat click on Select..., ...), and a tray-icon
+    // click/double-click can drive several of them within milliseconds of each other.
     if (GetForegroundWindow() == active) return true;
 
     WinAPI::Window::AllowSetForeground(active);

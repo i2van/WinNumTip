@@ -96,16 +96,23 @@ void Open(HWND dlg) {
     LOGFONT applied;
     const bool appliedSet = SavedSelection(applied);
 
+    (void)FontPickerHelper::Open(g_inst, dlg, g_workingFont, !g_workingFontSet, applied,
+                                 !appliedSet, g_fallbackFont);
+}
+
+void OnClosed(HWND dlg, WPARAM session) {
     LOGFONT selected;
     ZeroMemory(&selected, sizeof(selected));
-    const FontPickerHelper::Result result = FontPickerHelper::Open(
-        g_inst, dlg, g_workingFont, !g_workingFontSet, applied, !appliedSet,
-        g_fallbackFont, selected);
+    const FontPickerHelper::Result result = FontPickerHelper::Complete(session, selected);
 
     if (result == FontPickerHelper::Result::Chosen)
         SetWorkingSelection(dlg, &selected);
     else if (result == FontPickerHelper::Result::Default)
         SetWorkingSelection(dlg, nullptr);
+}
+
+void Close() {
+    FontPickerHelper::Close();
 }
 
 void ApplySelection(HWND dlg, const LOGFONT* selected) {
@@ -120,6 +127,11 @@ void Reset(HWND dlg) {
 void Save() {
     if (g_workingFontSet) Preferences::SetFont(g_workingFont);
     else                  Preferences::ClearFont();
+
+    // Keep an open font dialog's Apply button measuring against what is now saved.
+    LOGFONT applied;
+    const bool appliedSet = SavedSelection(applied);
+    FontPickerHelper::SetApplied(applied, !appliedSet);
 }
 
 bool HasChanges() {
@@ -135,6 +147,7 @@ bool HasChanges() {
 }
 
 void Cleanup() {
+    FontPickerHelper::Close();
     FontPreview::Cleanup();
 }
 

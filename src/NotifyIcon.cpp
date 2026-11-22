@@ -56,14 +56,11 @@ bool HandleTaskbarCreated(UINT msg) {
     return true;
 }
 
-void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
-    if (!menuOwner || !IsWindow(menuOwner)) menuOwner = commandTarget;
-
-    // Only call when needed: menuOwner may already be the foreground window (e.g. the
-    // font-picker dialog, just foregrounded by the WM_NOTIFYICON handler's
-    // PreferencesDialog::ActivateDialog); TrackPopupMenu requires menuOwner to be foreground
-    // so the menu dismisses correctly.
-    if (GetForegroundWindow() != menuOwner) SetForegroundWindow(menuOwner);
+void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget) {
+    // The hidden message window owns the menu: TrackPopupMenu requires its owner to be
+    // foreground so the menu dismisses correctly, and to belong to this thread (which rules
+    // out the font dialog, owned by the helper process).
+    if (GetForegroundWindow() != commandTarget) SetForegroundWindow(commandTarget);
 
     if(!show) return;
 
@@ -76,7 +73,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget, HWND menuOwner) {
     VERIFY(GetCursorPos(&pt));
 
     const UINT command = TrackPopupMenu(sub, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
-                                        pt.x, pt.y, 0, menuOwner, nullptr);
+                                        pt.x, pt.y, 0, commandTarget, nullptr);
     PostMessage(commandTarget, WM_NULL, 0, 0);
     VERIFY(DestroyMenu(menu));
     if (command) VERIFY(PostMessage(commandTarget, WM_COMMAND, MAKEWPARAM(command, 0), 0));

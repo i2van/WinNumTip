@@ -18,6 +18,7 @@
 #include <uiautomation.h>  // IUIAutomation (taskbar button rects)
 #include <commctrl.h>   // SysLink control (NMLINK) + InitCommonControlsEx
 #include <dlgs.h>       // ChooseFont common-dialog template control ids (stc5, cmb1, ...)
+#include <dwmapi.h>     // DwmGetWindowAttribute (visible frame bounds for placing the font dialog)
 #include <winhttp.h>    // HTTPS request behind the About dialog's release check (UpdateCheck)
 
 // Custom application messages, each posted to a window of this app and dispatched there:

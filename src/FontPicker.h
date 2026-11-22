@@ -13,9 +13,17 @@ namespace FontPicker {
 // FONTSELECTORDLG template resource passed to ChooseFont.
 void Init(HWND dlg, HINSTANCE inst);
 
-// Open the ChooseFont common dialog; on OK adopt the selection as the working font and
-// refresh the preview.
+// Open the ChooseFont common dialog modelessly (Preferences stays usable); when it closes
+// through OK, OnClosed adopts the selection as the working font and refreshes the preview.
 void Open(HWND dlg);
+
+// Handle FontPickerHelper::kClosedMessage ('session' is its wParam): on OK adopt the
+// selection as the working font and refresh the preview.
+void OnClosed(HWND dlg, WPARAM session);
+
+// Close the ChooseFont dialog, if open, discarding any selection not yet applied. Call when
+// Preferences closes.
+void Close();
 
 // Adopt a selection applied by the still-open ChooseFont dialog, refresh the preview, and
 // persist just the font preference. A null selection means the taskbar-font fallback.
@@ -32,7 +40,8 @@ void Save();
 // Whether the working font differs from the currently persisted font preference.
 [[nodiscard]] bool HasChanges();
 
-// Release the preview resources this module drives. Call from WM_DESTROY.
+// Release the preview resources this module drives, closing the ChooseFont dialog if still
+// open. Call from WM_DESTROY.
 void Cleanup();
 
 } // namespace FontPicker

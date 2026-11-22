@@ -87,18 +87,28 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_TIMER, OnTimer);
         HANDLE_MSG(hwnd, WM_NOTIFYICON, [](HWND h, UINT mouse) {
+            // A double-click arrives as button-up, double-click, button-up. The trailing
+            // button-up must not re-activate the font dialog over the Preferences dialog the
+            // double-click just brought forward, so it is ignored however long the second press
+            // is held; a new button-down clears any suppression left by a lost button-up.
+            static bool s_skipLeftUp;
+            if (mouse == WM_LBUTTONDOWN) s_skipLeftUp = false;
             if (mouse == WM_LBUTTONDBLCLK) {
+                s_skipLeftUp = true;
                 VERIFY(PostMessage(h, WM_COMMAND, MAKEWPARAM(IDM_PREFERENCES, 0), 0));
                 return;
             }
 
             bool isLeftButton = mouse == WM_LBUTTONUP;
+            if (isLeftButton && s_skipLeftUp) {
+                s_skipLeftUp = false;
+                return;
+            }
             if (mouse == WM_RBUTTONUP || isLeftButton || mouse == WM_CONTEXTMENU) {
-                const HWND fontDialog = FontPickerHelper::ActiveDialog();
-                // Foreground the font dialog (and with it its owner, Preferences) first, so
-                // the menu is owned by the window the user is actually interacting with.
-                if (fontDialog) (void)PreferencesDialog::ActivateDialog();
-                NotifyIcon::ShowMenu(g_inst, !isLeftButton, h, fontDialog);
+                // While Preferences is open, a click brings it and the font dialog, if open,
+                // to the foreground.
+                if (isLeftButton && PreferencesDialog::ActivateDialog()) return;
+                NotifyIcon::ShowMenu(g_inst, !isLeftButton, h);
             }
         });
         HANDLE_MSG(hwnd, WM_COMMAND, OnCommand);

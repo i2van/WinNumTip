@@ -1,6 +1,11 @@
 #include "stdafx.h"
 #include "FontPreview.h"
 
+// windowsx-style cracker alias for WM_SETTEXT that preserves the handler's result, which the
+// standard HANDLE_WM_SETTEXT cracker discards (SetWindowText reports it).
+#define WM_PREVIEW_SETTEXT WM_SETTEXT
+#define HANDLE_WM_PREVIEW_SETTEXT(hwnd, wParam, lParam, fn) ((fn)((hwnd), reinterpret_cast<LPCTSTR>(lParam)))
+
 namespace {
 
 // The preview shows the face name in the dialog's own font followed by these digits in the
@@ -218,6 +223,18 @@ void OnNcDestroy(HWND preview) {
     FORWARD_WM_NCDESTROY(preview, DefSubclassProc);
 }
 
+// WM_SETTEXT: the static control repaints itself in place on a text change, drawing the name
+// stock-style -- flush against the border and without the digits -- and leaves the proper
+// layout to the WM_PAINT that follows only once the thread is back in its message loop. That
+// unpadded frame is visible whenever the return is delayed, as when applying a font while Win
+// is held rebuilds the overlay first. Store the text through the default window handling,
+// bypassing the static's own painting, and let OnPaint draw it.
+LRESULT OnSetText(HWND preview, LPCTSTR text) {
+    const LRESULT result = DefWindowProc(preview, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(text));
+    VERIFY(InvalidateRect(preview, nullptr, FALSE));
+    return result;
+}
+
 // WM_SETCURSOR: the static control class carries its own arrow class cursor, so letting the
 // message fall through to DefSubclassProc (which forwards to that class handling) would show
 // the arrow regardless of what the parent dialog wants -- it never even reaches the parent, as
@@ -236,6 +253,7 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                               UINT_PTR /*id*/, DWORD_PTR /*ref*/) {
     switch (msg) {
         HANDLE_MSG(hwnd, WM_PAINT, OnPaint);
+        HANDLE_MSG(hwnd, WM_PREVIEW_SETTEXT, OnSetText);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnNcDestroy);
         HANDLE_MSG(hwnd, WM_SETCURSOR, OnSetCursor);
         case WM_ERASEBKGND: return TRUE;
