@@ -487,9 +487,10 @@ void PrimeSurface() {
 // Start the selected show animation (Preferences::ShowAnimation, System resolved from the
 // Windows setting) for the hidden, fully laid-out overlay. Slide, Roll and Expand use
 // AnimateWindow -- Slide and Roll unfolding away from the taskbar's docked 'edge' -- which
-// blocks this thread for Preferences::AnimationMs (the keyboard hook has its own thread, so typing is
-// never held up), after PrimeSurface. Fade is not left to AnimateWindow's AW_BLEND, which
-// ends fully opaque and strips WS_EX_LAYERED, discarding the opacity preference: it instead
+// blocks this thread for Preferences::AnimationMs after PrimeSurface. The keyboard hook is
+// dispatched on this same thread, so keyboard input waits for the animation to finish.
+// Fade is not left to AnimateWindow's AW_BLEND, which ends fully opaque
+// and strips WS_EX_LAYERED, discarding the opacity preference: it instead
 // primes alpha 0 and lets kFadeTimer ramp it up to the preference without blocking.
 // Returns true only when AnimateWindow has already shown the window; otherwise (Fade,
 // None, or AnimateWindow failing) the caller shows it at once.

@@ -30,7 +30,7 @@ volatile  LONG_PTR g_desired = kHide;
 // desktop) or the release arrived injected (remapper/VM) and so was ignored by the
 // hook. See ShouldShow.
 int            g_upTicks;
-constexpr int  kUpTicksToHide  = 10;   // ~0.75s at the message window's 75ms poll
+constexpr int  kUpTicksToHide  = 10;   // 10 polls (~0.75s at the default 75ms interval)
 
 // Low-level keyboard hook. It only flips g_desired for Win key-down/up and returns,
 // doing no heavy work and touching no message queue, so it always returns within the
@@ -86,7 +86,7 @@ bool ShouldShow() {
     // physical Win up is never seen by the hook -- never delivered (e.g. Win+L switches
     // to the secure desktop) or the release arrived injected and was ignored -- which
     // would otherwise leave the bar stuck on. We clear the flag only after the key has
-    // read released for kUpTicksToHide consecutive polls (~0.75s); the debounce keeps a
+    // read released for kUpTicksToHide consecutive polls; the debounce keeps a
     // transient async "up" blip from hiding the bar mid-hold, and the normal hide path
     // is the hook's physical Win-up edge, not this backstop.
     // Tick the backstop only while the bar is shown AND the key reads physically up;

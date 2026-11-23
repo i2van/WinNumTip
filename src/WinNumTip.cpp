@@ -167,8 +167,8 @@ extern "C" void Entry() {
     mc.lpszClassName = kMsgClass;
     VERIFY(RegisterClassEx(&mc));
 
-    // Everything else runs on this single (main) thread: COM apartment, UI Automation,
-    // and the message pump; only the keyboard hook has a thread of its own (see
+    // Everything runs on this single (main) thread: COM apartment, UI Automation, the
+    // message pump, and the keyboard hook, whose callback this pump dispatches (see
     // KeyboardHook::Install). The overlay window is created on demand (on Win-down)
     // and destroyed on Win-up.
     VERIFY(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));

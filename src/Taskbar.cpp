@@ -49,13 +49,13 @@ constexpr LPCTSTR kWin10TaskListClass = TEXT("MSTaskListWClass");
 // once found, treat every Button-type element under it as a genuine app button -- the
 // container is already scoped away from the Start button, search box and system tray,
 // so (unlike the Windows 11 query) no class-name or automation-id filtering is needed
-// on top of it. Mirrors the strict/lenient pair above: prefer buttons UI Automation
-// reports on-screen, and fall back to every button kept on-taskbar geometrically when
-// the tree transiently reports them all as offscreen. 'condOnScreen' is the caller's
-// already-created IsOffscreen==FALSE condition, reused here. Only called once
-// WinAPI::OS::IsWindows10() has confirmed the OS, so an empty result here means the
-// container itself was not found rather than a wrong-OS miss. Returns the number of
-// rectangles written to 'out' (0 when the container is not found).
+// on top of it. Mirrors the Windows 11 strict/lenient pair in CollectButtonRects below:
+// prefer buttons UI Automation reports on-screen, and fall back to every button kept
+// on-taskbar geometrically when the tree transiently reports them all as offscreen.
+// 'condOnScreen' is the caller's already-created IsOffscreen==FALSE condition, reused
+// here. Only called once WinAPI::OS::IsWindows10() has confirmed the OS, so an empty
+// result here means the container itself was not found rather than a wrong-OS miss.
+// Returns the number of rectangles written to 'out' (0 when the container is not found).
 [[nodiscard]] int CollectLegacyRects(IUIAutomation* uia, IUIAutomationElement* taskbarEl, HWND taskbar,
                                      IUIAutomationCondition* condOnScreen, RECT* out, int max) {
     VARIANT vListClass;
