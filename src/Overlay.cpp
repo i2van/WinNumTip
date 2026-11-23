@@ -291,10 +291,6 @@ void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
     if (s && g_font) SetWindowFont(s, g_font, FALSE);
 }
 
-// Choose the number text color. Prefer the taskbar theme's own text color; when the
-// theme has none (or is unavailable), fall back to whichever system color contrasts
-// with the sampled bar background (COLOR_WINDOWTEXT vs COLOR_HIGHLIGHTTEXT).
-
 // Sample the center pixel of the themed bar background, or CLR_INVALID when the bar
 // is not themed. Used to pick both the contrasting text color and the (blended)
 // separator color.
@@ -463,8 +459,10 @@ int CollectCurrent(RECT* out, int max) {
 // keeps polling and the bar can reappear when a button comes back (e.g. the only app's
 // button briefly disappears during a Win+Arrow switch).
 void ApplyEmpty() {
-    if (g_overlay) ShowWindow(g_overlay, SW_HIDE);
-    if (g_overlay) DestroyChildren(g_overlay);
+    if (g_overlay) {
+        ShowWindow(g_overlay, SW_HIDE);
+        DestroyChildren(g_overlay);
+    }
     FreeResources();
     g_snapN = 0;
 }
@@ -743,9 +741,8 @@ void Refresh() {
     bool vertical;
     ComputeStripBounds(tr, edge, dpi, defThick, btnThick, vertical);
 
-    const int tipPercent = Preferences::TipSizePercent();
-    const int p = max(Preferences::kMinPercent, min(tipPercent, Preferences::kMaxPercent));
-    int thick = MulDiv(btnThick, p, Preferences::kMaxPercent);
+    // Preferences::TipSizePercent is already clamped to [kMinPercent, kMaxPercent].
+    int thick = MulDiv(btnThick, Preferences::TipSizePercent(), Preferences::kMaxPercent);
     thick = max(defThick, min(thick, btnThick));
 
     const int BH = vertical ? 0 : thick;

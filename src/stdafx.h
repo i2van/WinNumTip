@@ -46,7 +46,7 @@
 #define APP_VERSION       TEXT(APP_STRINGIZE(APP_VER_STR))
 
 // No-CRT memory support. We build with /NODEFAULTLIB, so ZeroMemory maps to the
-// ntdll RtlZeroMemory declared below (RtlFill/RtlMove are declared for symmetry).
+// ntdll RtlZeroMemory and MoveMemory to RtlMoveMemory, both declared below.
 // We do NOT provide memset/memcpy: the current code never causes the compiler to
 // emit external calls to them (zeroing goes through ZeroMemory/RtlZeroMemory, and
 // Release inlines memory ops under /GL). If a future change makes the compiler
@@ -54,12 +54,10 @@
 // link will fail with an unresolved symbol -- re-add a small NoCrt.cpp defining
 // them (forwarding to RtlFillMemory/RtlMoveMemory), compiled without /GL and
 // with #pragma function(memset, memcpy).
-#undef RtlFillMemory
 #undef RtlMoveMemory
 #undef RtlZeroMemory
 
 extern "C" {
-    NTSYSAPI void NTAPI RtlFillMemory(void* dst, SIZE_T length, UCHAR fill);
     NTSYSAPI void NTAPI RtlMoveMemory(void* dst, const void* src, SIZE_T length);
     NTSYSAPI void NTAPI RtlZeroMemory(void* dst, SIZE_T length);
 }

@@ -1,7 +1,5 @@
 #pragma once
 
-struct IUIAutomation;
-
 // Taskbar discovery and taskbar-button geometry (UI Automation based).
 namespace Taskbar {
 

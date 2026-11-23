@@ -42,9 +42,7 @@ struct Exchange {
 };
 
 Exchange* g_exchange;
-HWND g_dialog;
 LONG g_exchangeSerial;
-bool g_isHelperProcess;
 
 // Main-process state for the open helper session (see FontPickerHelper::Open). g_session is
 // read by the thread-pool wait callback, so it changes only while no wait is registered.
@@ -81,7 +79,6 @@ constexpr UINT_PTR kDlgSubclassId = 2;
 constexpr UINT_PTR kApplyButtonSubclassId = 3;
 
 void SetDialog(HWND dialog) {
-    g_dialog = dialog;
     if (g_exchange) g_exchange->dialog = dialog;
 }
 
@@ -264,27 +261,8 @@ void ApplyChooseFontSample(HWND sample, const LOGFONT& selected) {
             continue;
         }
 
-        const HGDIOBJ previous = SelectObject(dc, candidate);
-        const bool selectSucceeded = previous && previous != HGDI_ERROR;
-        ASSERT(selectSucceeded);
-        if (!selectSucceeded) {
-            VERIFY(DeleteObject(candidate));
-            VERIFY(ReleaseDC(sample, dc) == 1);
-            return;
-        }
-
         SampleRun run = { { 0, 0 }, 0, 0 };
-        const BOOL measured = GetTextExtentPoint32(dc, kFontSample, lstrlen(kFontSample), &run.extent);
-        ASSERT(measured);
-        if (measured) MeasureSampleBearings(dc, kFontSample, lstrlen(kFontSample), run);
-        const HGDIOBJ restored = SelectObject(dc, previous);
-        const bool restoreSucceeded = restored && restored != HGDI_ERROR;
-        ASSERT(restoreSucceeded);
-        if (!restoreSucceeded) {
-            VERIFY(ReleaseDC(sample, dc) == 1);
-            VERIFY(DeleteObject(candidate));
-            return;
-        }
+        const bool measured = MeasureSampleRun(dc, candidate, kFontSample, run);
         VERIFY(DeleteObject(candidate));
         if (!measured) {
             VERIFY(ReleaseDC(sample, dc) == 1);
@@ -466,7 +444,7 @@ void ApplyChooseFontSelection(HWND dialog) {
 }
 
 void OnChooseFontCommand(HWND dialog, int id, HWND control, UINT notification) {
-    if (g_isHelperProcess && id == IDCANCEL) {
+    if (id == IDCANCEL) {
         g_pendingDialogResult = FontPickerHelper::Result::Cancelled;
         FORWARD_WM_COMMAND(dialog, id, control, notification, DefSubclassProc);
         if (IsWindowVisible(dialog))
@@ -474,7 +452,7 @@ void OnChooseFontCommand(HWND dialog, int id, HWND control, UINT notification) {
         return;
     }
 
-    if (g_isHelperProcess && id == IDOK) {
+    if (id == IDOK) {
         WinAPI::ChooseFont::GetLogFont(dialog, g_dialogResult);
         g_pendingDialogResult = g_resetToFallback
             ? FontPickerHelper::Result::Default
@@ -534,32 +512,19 @@ LRESULT OnChooseFontNotify(HWND dialog, int idFrom, NMHDR* notification) {
 }
 
 void OnChooseFontClose(HWND dialog) {
-    if (!g_isHelperProcess) {
-        FORWARD_WM_CLOSE(dialog, DefSubclassProc);
-        return;
-    }
-
     g_pendingDialogResult = FontPickerHelper::Result::Cancelled;
     FORWARD_WM_CLOSE(dialog, DefSubclassProc);
     if (IsWindowVisible(dialog))
         g_pendingDialogResult = FontPickerHelper::Result::Pending;
 }
 
-LRESULT CALLBACK ChooseFontDlgSubclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-                                       UINT_PTR id, DWORD_PTR ref);
-
-void OnChooseFontNcDestroy(HWND dialog) {
-    if (g_isHelperProcess) {
-        const FontPickerHelper::Result result =
-            g_pendingDialogResult == FontPickerHelper::Result::Pending
-                ? FontPickerHelper::Result::Cancelled
-                : g_pendingDialogResult;
-        Finish(result,
-               result == FontPickerHelper::Result::Chosen ? &g_dialogResult : nullptr);
-    }
-
-    VERIFY(RemoveWindowSubclass(dialog, ChooseFontDlgSubclass, kDlgSubclassId));
-    FORWARD_WM_NCDESTROY(dialog, DefSubclassProc);
+// The dialog is going away: publish its result and end the helper process (see Finish).
+void OnChooseFontNcDestroy(HWND /*dialog*/) {
+    const FontPickerHelper::Result result =
+        g_pendingDialogResult == FontPickerHelper::Result::Pending
+            ? FontPickerHelper::Result::Cancelled
+            : g_pendingDialogResult;
+    Finish(result, result == FontPickerHelper::Result::Chosen ? &g_dialogResult : nullptr);
 }
 
 void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
@@ -568,7 +533,7 @@ void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
         // Make the dialog modeless: ChooseFont's DialogBox has disabled its owner,
         // Preferences, by the time it shows the dialog, so enable it again. EndDialog still
         // re-enables it as usual (it disabled it), which is harmless now.
-        if (g_isHelperProcess && IsWindow(g_parentDialog))
+        if (IsWindow(g_parentDialog))
             (void)EnableWindow(g_parentDialog, TRUE);
         RefreshChooseFontSample(dialog);
         UpdateChooseFontApplyState(dialog);
@@ -872,7 +837,6 @@ bool RunIfRequested(HINSTANCE inst) {
     }
 
     if (exchange->cbSize == sizeof(Exchange) && exchange->version == kExchangeVersion) {
-        g_isHelperProcess = true;
         g_exchange = exchange;
 
         Result result = Result::Failed;
@@ -893,7 +857,6 @@ bool RunIfRequested(HINSTANCE inst) {
         exchange->status = static_cast<LONG>(result);
 
         g_exchange = nullptr;
-        g_isHelperProcess = false;
     }
 
     VERIFY(UnmapViewOfFile(exchange));
@@ -987,7 +950,7 @@ bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefaul
 }
 
 Result Complete(WPARAM session, LOGFONT& selected) {
-    if (!g_exchange || g_isHelperProcess || static_cast<LONG>(session) != g_session.serial)
+    if (!g_exchange || static_cast<LONG>(session) != g_session.serial)
         return Result::Pending;
 
     const Result result = static_cast<Result>(g_exchange->status);
@@ -1005,7 +968,7 @@ Result Complete(WPARAM session, LOGFONT& selected) {
 }
 
 void Close() {
-    if (!g_exchange || g_isHelperProcess) return;
+    if (!g_exchange) return;
 
     // Unregister first, so the exit this causes posts no kClosedMessage; any already posted
     // is recognized as stale by Complete. TerminateProcess fails harmlessly when the helper
@@ -1020,7 +983,7 @@ void Close() {
 }
 
 void SetApplied(const LOGFONT& applied, bool appliedDefault) {
-    if (!g_exchange || g_isHelperProcess) return;
+    if (!g_exchange) return;
 
     MoveMemory(&g_exchange->applied, &applied, sizeof(g_exchange->applied));
     g_exchange->appliedDefault = appliedDefault ? TRUE : FALSE;
@@ -1032,7 +995,7 @@ void SetApplied(const LOGFONT& applied, bool appliedDefault) {
 }
 
 bool ReadAppliedFont(LOGFONT& selected) {
-    if (!g_exchange || g_isHelperProcess) return false;
+    if (!g_exchange) return false;
     MoveMemory(&selected, &g_exchange->font, sizeof(selected));
     return selected.lfFaceName[0] != 0;
 }
@@ -1057,7 +1020,7 @@ bool ActivateDialog() {
 // A hidden dialog is treated as gone: EndDialog hides it and activates Preferences before it is
 // destroyed, and redirecting that activation back to the hidden dialog would bounce focus.
 HWND ActiveDialog() {
-    const HWND active = g_exchange ? g_exchange->dialog : g_dialog;
+    const HWND active = g_exchange ? g_exchange->dialog : nullptr;
     return active && IsWindow(active) && IsWindowVisible(active) ? active : nullptr;
 }
 

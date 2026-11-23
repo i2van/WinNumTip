@@ -1,7 +1,5 @@
 #pragma once
 
-struct IUIAutomation;
-
 // The numbered tip overlay shown alongside the taskbar while the Windows key is
 // held. A fresh layered window is created on Show and destroyed on Hide.
 namespace Overlay {

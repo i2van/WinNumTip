@@ -24,35 +24,29 @@
 #define IDC_ABOUT_README                1003
 #define IDC_ABOUT_COPYRIGHT             1004
 #define IDC_ABOUT_PREFS                 1005
-#define IDC_SIZE_LABEL                  1006
-#define IDC_SIZE_VALUE                  1007
-#define IDC_SIZE_SLIDER                 1008
-#define IDC_REFRESH_LABEL               1009
-#define IDC_REFRESH_VALUE               1010
-#define IDC_REFRESH_SLIDER              1011
-#define IDC_POLL_LABEL                  1012
-#define IDC_POLL_VALUE                  1013
-#define IDC_POLL_SLIDER                 1014
-#define IDC_DARK_THEME                  1015
-#define IDC_FONT_LABEL                  1016
-#define IDC_FONT_NAME                   1017
-#define IDC_FONT_BUTTON                 1018
-#define IDC_RESET                       1019
-#define IDC_FONT_RESET_LINK             1020
-#define IDC_APPLY                       1021
-#define IDC_ABOUT_PROJECT_SITE          1022
-#define IDC_OPACITY_LABEL               1023
-#define IDC_OPACITY_VALUE               1024
-#define IDC_OPACITY_SLIDER              1025
-#define IDC_HIDE_BORDER                 1026
-#define IDC_HIDE_SEPARATOR              1027
-#define IDC_COMPACT_VIEW                1028
-#define IDC_ABOUT_UPDATE                1029
-#define IDC_START_WITH_WINDOWS          1030
-#define IDC_ANIMATION_LABEL             1031
-#define IDC_ANIMATION                   1032
-#define IDC_ANIMATION_SLIDER            1033
-#define IDC_ANIMATION_DURATION_LABEL    1034
+#define IDC_SIZE_VALUE                  1006
+#define IDC_SIZE_SLIDER                 1007
+#define IDC_REFRESH_VALUE               1008
+#define IDC_REFRESH_SLIDER              1009
+#define IDC_POLL_VALUE                  1010
+#define IDC_POLL_SLIDER                 1011
+#define IDC_DARK_THEME                  1012
+#define IDC_FONT_NAME                   1013
+#define IDC_FONT_BUTTON                 1014
+#define IDC_RESET                       1015
+#define IDC_FONT_RESET_LINK             1016
+#define IDC_APPLY                       1017
+#define IDC_ABOUT_PROJECT_SITE          1018
+#define IDC_OPACITY_VALUE               1019
+#define IDC_OPACITY_SLIDER              1020
+#define IDC_HIDE_BORDER                 1021
+#define IDC_HIDE_SEPARATOR              1022
+#define IDC_COMPACT_VIEW                1023
+#define IDC_ABOUT_UPDATE                1024
+#define IDC_START_WITH_WINDOWS          1025
+#define IDC_ANIMATION                   1026
+#define IDC_ANIMATION_SLIDER            1027
+#define IDC_ANIMATION_DURATION_LABEL    1028
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -62,9 +56,9 @@
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        102
+#define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40017
-#define _APS_NEXT_CONTROL_VALUE         1035
+#define _APS_NEXT_CONTROL_VALUE         1029
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

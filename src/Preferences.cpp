@@ -111,7 +111,7 @@ void BuildIniPath() {
 // about to create the file, the dark-theme flag is stored first: it was derived from the
 // Windows mode only because the file was missing, and a partial INI (e.g. just the font)
 // would otherwise make the next Load read it as off.
-void Write(LPCTSTR key, LPCTSTR value) {
+void WriteString(LPCTSTR key, LPCTSTR value) {
     if (!IniExists())
         WritePrivateProfileString(kSection, kKeyDarkTheme, g_flags.darkTheme ? TEXT("1") : TEXT("0"), g_iniPath);
     WritePrivateProfileString(kSection, key, value, g_iniPath);
@@ -119,14 +119,14 @@ void Write(LPCTSTR key, LPCTSTR value) {
 
 // Persist a boolean preference as "1"/"0" under the given key in the INI file.
 void WriteBool(LPCTSTR key, bool value) {
-    Write(key, value ? TEXT("1") : TEXT("0"));
+    WriteString(key, value ? TEXT("1") : TEXT("0"));
 }
 
 // Persist an integer preference under the given key in the INI file.
 void WriteInt(LPCTSTR key, int value) {
     TCHAR buf[16];
     WinAPI::String::Format(buf, TEXT("%d"), value);
-    Write(key, buf);
+    WriteString(key, buf);
 }
 
 // Read an integer preference under the given key from the INI file, or 'def' if absent.
@@ -143,14 +143,8 @@ void WriteInt(LPCTSTR key, int value) {
 // Read an integer preference under the given key from the INI file (or 'def' if absent),
 // clamped to [lo, hi] (defaulting to the tip-size percentage bounds so the common case
 // needs no explicit bounds).
-[[nodiscard]] int ReadPercent(LPCTSTR key, int def, int lo = Preferences::kMinPercent, int hi = Preferences::kMaxPercent) {
+[[nodiscard]] int ReadClampedInt(LPCTSTR key, int def, int lo = Preferences::kMinPercent, int hi = Preferences::kMaxPercent) {
     return Clamp(ReadInt(key, def), lo, hi);
-}
-
-// Persist a string preference under the given key in the INI file. A null 'value' removes
-// the key from the section.
-void WriteString(LPCTSTR key, LPCTSTR value) {
-    Write(key, value);
 }
 
 // Read a string preference under the given key into 'buf' (capacity 'cch' chars),
@@ -179,9 +173,9 @@ namespace Preferences {
 
 void Load() {
     BuildIniPath();
-    const int legacyTipPercent = ReadPercent(kLegacyKeyTipSize, kDefaultTipSizePercent);
-    g_tipPercent = ReadPercent(kKeyTipSize, legacyTipPercent);
-    g_opacityPercent = ReadPercent(kKeyOpacity, kDefaultOpacityPercent, kMinOpacityPercent, kMaxOpacityPercent);
+    const int legacyTipPercent = ReadClampedInt(kLegacyKeyTipSize, kDefaultTipSizePercent);
+    g_tipPercent = ReadClampedInt(kKeyTipSize, legacyTipPercent);
+    g_opacityPercent = ReadClampedInt(kKeyOpacity, kDefaultOpacityPercent, kMinOpacityPercent, kMaxOpacityPercent);
     // No INI yet (first run): follow the Windows system mode. Otherwise use the saved
     // value, migrating the legacy "InvertColors" key.
     g_flags.darkTheme     = IniExists()
@@ -190,11 +184,11 @@ void Load() {
     g_flags.hideBorder    = ReadBool(kKeyHideBorder, false);
     g_flags.hideSeparator = ReadBool(kKeyHideSeparator, false);
     g_flags.compact       = ReadBool(kKeyCompactView, false);
-    g_refreshMs    = ReadPercent(kKeyRefreshMs, kDefaultRefreshMs, kMinRefreshMs, kMaxRefreshMs);
-    g_pollMs       = ReadPercent(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
+    g_refreshMs    = ReadClampedInt(kKeyRefreshMs, kDefaultRefreshMs, kMinRefreshMs, kMaxRefreshMs);
+    g_pollMs       = ReadClampedInt(kKeyPollMs, kDefaultPollMs, kMinPollMs, kMaxPollMs);
     g_startWithWindows = ReadBool(kKeyStartWithWindows, false);
     g_animation = ReadAnimation();
-    g_animationMs = ReadPercent(kKeyAnimationMs, kDefaultAnimationMs, kMinAnimationMs, kMaxAnimationMs);
+    g_animationMs = ReadClampedInt(kKeyAnimationMs, kDefaultAnimationMs, kMinAnimationMs, kMaxAnimationMs);
 
     ZeroMemory(&g_font, sizeof(g_font));
     TCHAR face[LF_FACESIZE];
