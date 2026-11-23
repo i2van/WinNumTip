@@ -107,19 +107,23 @@ void BuildIniPath() {
     return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+// The words WriteBool stores a boolean preference as.
+constexpr LPCTSTR kBoolYes = TEXT("yes");
+constexpr LPCTSTR kBoolNo  = TEXT("no");
+
 // Persist 'value' under 'key' in the INI file (null removes the key). When this write is
 // about to create the file, the dark-theme flag is stored first: it was derived from the
 // Windows mode only because the file was missing, and a partial INI (e.g. just the font)
 // would otherwise make the next Load read it as off.
 void WriteString(LPCTSTR key, LPCTSTR value) {
     if (!IniExists())
-        WritePrivateProfileString(kSection, kKeyDarkTheme, g_flags.darkTheme ? TEXT("1") : TEXT("0"), g_iniPath);
+        WritePrivateProfileString(kSection, kKeyDarkTheme, g_flags.darkTheme ? kBoolYes : kBoolNo, g_iniPath);
     WritePrivateProfileString(kSection, key, value, g_iniPath);
 }
 
-// Persist a boolean preference as "1"/"0" under the given key in the INI file.
+// Persist a boolean preference as "yes"/"no" under the given key in the INI file.
 void WriteBool(LPCTSTR key, bool value) {
-    WriteString(key, value ? TEXT("1") : TEXT("0"));
+    WriteString(key, value ? kBoolYes : kBoolNo);
 }
 
 // Persist an integer preference under the given key in the INI file.
@@ -134,12 +138,6 @@ void WriteInt(LPCTSTR key, int value) {
     return static_cast<int>(GetPrivateProfileInt(kSection, key, def, g_iniPath));
 }
 
-// Read a boolean preference (stored as a nonzero/zero integer) under the given key from
-// the INI file, or 'def' if absent.
-[[nodiscard]] bool ReadBool(LPCTSTR key, bool def) {
-    return ReadInt(key, def ? 1 : 0) != 0;
-}
-
 // Read an integer preference under the given key from the INI file (or 'def' if absent),
 // clamped to [lo, hi] (defaulting to the tip-size percentage bounds so the common case
 // needs no explicit bounds).
@@ -151,6 +149,33 @@ void WriteInt(LPCTSTR key, int value) {
 // substituting 'def' when the key is absent. The buffer is always null-terminated.
 void ReadString(LPCTSTR key, LPCTSTR def, LPTSTR buf, int cch) {
     GetPrivateProfileString(kSection, key, def, buf, static_cast<DWORD>(cch), g_iniPath);
+}
+
+// The words a boolean preference may be written as besides an integer.
+struct BoolName {
+    LPCTSTR name;
+    bool value;
+};
+
+constexpr BoolName kBoolNames[] = {
+    { kBoolYes,     true }, { kBoolNo,       false },
+    { TEXT("on"),   true }, { TEXT("off"),   false },
+    { TEXT("true"), true }, { TEXT("false"), false },
+};
+
+// Read a boolean preference under the given key from the INI file: yes/no (as WriteBool
+// stores it), on/off or true/false, matched case-insensitively and locale-independently, or
+// a decimal or 0x-prefixed hex integer as GetPrivateProfileInt reads it (nonzero means
+// true), ignoring surrounding blanks; 'def' if absent or unrecognized.
+[[nodiscard]] bool ReadBool(LPCTSTR key, bool def) {
+    TCHAR value[32];
+    ReadString(key, TEXT(""), value, ARRAYSIZE(value));
+    StrTrim(value, TEXT(" \t"));
+    for (const BoolName& boolName : kBoolNames)
+        if (CompareStringOrdinal(value, -1, boolName.name, -1, TRUE) == CSTR_EQUAL)
+            return boolName.value;
+    int number = 0;
+    return StrToIntEx(value, STIF_SUPPORT_HEX, &number) ? number != 0 : def;
 }
 
 // Read the show animation saved by name (see AnimationName), matched case-insensitively

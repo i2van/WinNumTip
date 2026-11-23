@@ -85,6 +85,9 @@ Settings are saved next to the app in `WinNumTip.ini`. Click **Apply** to save t
 without closing the dialog or **OK** to save and close; applied settings take effect
 immediately.
 
+On/off settings are saved as `yes` or `no`; when editing the file by hand, `on`/`off`,
+`true`/`false` and `1`/`0` are accepted too, in any letter case.
+
 To find settings file, open the dialog's window menu (click its title-bar icon or press
 `Alt`+`Space`) and choose **Navigate to file**: Windows Explorer opens with
 `WinNumTip.ini` selected or the app's folder when no settings have been saved yet.
