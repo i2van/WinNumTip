@@ -5,7 +5,7 @@
 
 namespace {
 
-LPCTSTR const kOverlayClass = TEXT("WinNumTipOverlay-") APP_GUID;
+constexpr LPCTSTR kOverlayClass = TEXT("WinNumTipOverlay") APP_GUID;
 
 // Win+0..9: 10 is the most taskbar buttons we show tips for.
 constexpr int kMaxTips = 10;
@@ -19,28 +19,28 @@ constexpr int kSepId = 1;
 // controls and per-show theme/font/brush are swapped as the taskbar changes.
 HWND     g_overlay;
 HFONT    g_font;
-bool     g_ownFont;    // true when g_font must be DeleteObject'd (not a stock font)
+bool     g_ownFont;      // true when g_font must be DeleteObject'd (not a stock font)
 HTHEME   g_theme;
-HBRUSH   g_lineBrush;  // solid brush that paints the separator lines
+HBRUSH   g_lineBrush;    // solid brush that paints the separator lines
 HBRUSH   g_borderBrush;  // solid brush, fixed to the system window-frame color, that paints the outer border
-HBRUSH   g_bgBrush;    // solid strip-fill brush, only in dark-theme mode
-Preferences::RenderFlags g_flags;  // cached; mirrors Preferences::Flags() for this show
+HBRUSH   g_bgBrush;      // solid strip-fill brush, only in dark-theme mode
+Preferences::RenderFlags g_flags;          // cached; mirrors Preferences::Flags() for this show
 int      g_bgPart = TBP_BACKGROUNDBOTTOM;  // taskbar background part for the docked edge
-COLORREF g_textColor;  // resolved from the theme / system colors in Show
-COLORREF g_barColor;   // sampled themed bar color; flat fallback fill for "hide border"
-bool     g_active;     // true between Show (Win down) and Hide (Win up)
+COLORREF g_textColor;    // resolved from the theme / system colors in Show
+COLORREF g_barColor;     // sampled themed bar color; flat fallback fill for "hide border"
+bool     g_active;       // true between Show (Win down) and Hide (Win up)
 
 // Retained so the refresh timer can rebuild the bar in place when the taskbar's
 // buttons change while it is shown (e.g. an app minimizes/closes to the notification
 // area, which removes its button and would otherwise leave an orphaned number behind).
 IUIAutomation* g_uia;
 HINSTANCE      g_inst;
-int            g_snapN;  // button count captured when the bar was built; also the number
-                          // of valid entries in g_snap and g_tipRect below
-RECT           g_snap[kMaxTips];              // button rects captured when the bar was built
-RECT           g_tipRect[kMaxTips];  // each tip's own digit square (see ApplyStripRegion),
-                                     // cached so PaintBorder can frame each one
-                                     // individually in "compact" mode
+int            g_snapN;               // button count captured when the bar was built; also the
+                                      // number of valid entries in g_snap and g_tipRect below
+RECT           g_snap[kMaxTips];      // button rects captured when the bar was built
+RECT           g_tipRect[kMaxTips];   // each tip's own digit square (see ApplyStripRegion),
+                                      // cached so PaintBorder can frame each one
+                                      // individually in "compact" mode
 // Timer id for the persistent refresh timer; its interval is the user's "refresh interval"
 // preference (Preferences::RefreshIntervalMs), re-applied on each Show or Apply.
 constexpr UINT_PTR kRefreshTimer = 1;
@@ -63,7 +63,7 @@ void Refresh();
 // obscured), filling 'out'. Shared by the timer's change check and Refresh.
 [[nodiscard]] int CollectCurrent(RECT* out, int max);
 
-inline void ArmRefreshTimer() {
+void ArmRefreshTimer() {
     VERIFY(SetTimer(g_overlay, kRefreshTimer, Preferences::RefreshIntervalMs(), nullptr));
 }
 
@@ -879,7 +879,7 @@ void Refresh() {
     for (int i = 0; i < n; ++i) {
         TCHAR s[2];
         s[0] = i < kMaxTips - 1 ? static_cast<TCHAR>(TEXT('1') + i) : TEXT('0');
-        s[1] = 0;
+        s[1] = TEXT('\0');
         if (vertical) {
             const int y = btn[i].top - ov.top;
             const int h = btn[i].bottom - btn[i].top;

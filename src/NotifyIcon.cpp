@@ -62,7 +62,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget) {
     // out the font dialog, owned by the helper process).
     if (GetForegroundWindow() != commandTarget) SetForegroundWindow(commandTarget);
 
-    if(!show) return;
+    if (!show) return;
 
     const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_NOTIFYICONMENU));
     if (!menu) return;
@@ -74,7 +74,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget) {
 
     const UINT command = TrackPopupMenu(sub, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
                                         pt.x, pt.y, 0, commandTarget, nullptr);
-    PostMessage(commandTarget, WM_NULL, 0, 0);
+    (void)PostMessage(commandTarget, WM_NULL, 0, 0);
     VERIFY(DestroyMenu(menu));
     if (command) VERIFY(PostMessage(commandTarget, WM_COMMAND, MAKEWPARAM(command, 0), 0));
 }

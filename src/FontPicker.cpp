@@ -56,7 +56,7 @@ void SetWorkingSelection(HWND dlg, const LOGFONT* selected) {
 // Build the saved font preference over the fallback baseline (which carries the sensible
 // height/charset the preference itself does not store), reporting whether one is set at all.
 // Requires g_fallbackFont, so call only after SeedFallbackFont.
-bool SavedSelection(LOGFONT& saved) {
+[[nodiscard]] bool SavedSelection(LOGFONT& saved) {
     MoveMemory(&saved, &g_fallbackFont, sizeof(saved));
     if (!Preferences::FontIsSet()) return false;
 

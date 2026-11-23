@@ -195,7 +195,7 @@ DWORD WINAPI CheckThread(LPVOID /*param*/) {
     // read (About closed while the request was finishing), and a failed post is exactly the
     // wanted outcome then -- the result stays cached for the next time About is opened.
     const HWND notify = g_notify;
-    if (notify) PostMessage(notify, WM_UPDATECHECK, 0, 0);
+    if (notify) (void)PostMessage(notify, WM_UPDATECHECK, 0, 0);
 
     return 0;
 }

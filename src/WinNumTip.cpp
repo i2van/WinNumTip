@@ -99,7 +99,7 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return;
             }
 
-            bool isLeftButton = mouse == WM_LBUTTONUP;
+            const bool isLeftButton = mouse == WM_LBUTTONUP;
             if (isLeftButton && s_skipLeftUp) {
                 s_skipLeftUp = false;
                 return;
@@ -147,7 +147,7 @@ extern "C" void Entry() {
     // that legacy suppression process-wide so such exceptions surface normally. The flag is
     // unsupported on pre-2004 Windows 10, where the call simply fails (hence no VERIFY).
     BOOL suppressTimerProcExceptions = FALSE;
-    SetUserObjectInformationW(GetCurrentProcess(), UOI_TIMERPROC_EXCEPTION_SUPPRESSION, &suppressTimerProcExceptions, sizeof(suppressTimerProcExceptions));
+    SetUserObjectInformation(GetCurrentProcess(), UOI_TIMERPROC_EXCEPTION_SUPPRESSION, &suppressTimerProcExceptions, sizeof(suppressTimerProcExceptions));
 
     // Load persisted preferences (INI next to the exe) before the overlay is first shown.
     Preferences::Load();
@@ -173,7 +173,7 @@ extern "C" void Entry() {
     // and destroyed on Win-up.
     VERIFY(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));
     VERIFY(SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
-                     __uuidof(IUIAutomation), (void**)&g_uia)));
+                     __uuidof(IUIAutomation), reinterpret_cast<void**>(&g_uia))));
     Overlay::Init(g_inst);
 
     // Register the common controls we use -- the SysLink (in the About dialog and the

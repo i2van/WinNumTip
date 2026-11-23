@@ -6,26 +6,26 @@
 namespace {
 
 // INI section/key for the persisted preferences. The file lives next to the executable.
-constexpr LPCTSTR kSection          = TEXT("Preferences");
-constexpr LPCTSTR kKeyTipSize       = TEXT("TipSizePercent");
-constexpr LPCTSTR kLegacyKeyTipSize = TEXT("LabelSizePercent");
-constexpr LPCTSTR kKeyOpacity       = TEXT("OpacityPercent");
-constexpr LPCTSTR kKeyDarkTheme     = TEXT("DarkTheme");
-constexpr LPCTSTR kLegacyKeyInvert  = TEXT("InvertColors");
-constexpr LPCTSTR kKeyHideBorder    = TEXT("HideBorder");
-constexpr LPCTSTR kKeyHideSeparator = TEXT("HideSeparator");
-constexpr LPCTSTR kKeyCompactView   = TEXT("CompactView");
-constexpr LPCTSTR kKeyFontFace      = TEXT("FontFace");
-constexpr LPCTSTR kKeyFontWeight    = TEXT("FontWeight");
-constexpr LPCTSTR kKeyFontItalic    = TEXT("FontItalic");
-constexpr LPCTSTR kKeyFontUnderline = TEXT("FontUnderline");
-constexpr LPCTSTR kKeyFontStrikeOut = TEXT("FontStrikeOut");
-constexpr LPCTSTR kKeyRefreshMs = TEXT("RefreshIntervalMs");
-constexpr LPCTSTR kKeyPollMs    = TEXT("PollIntervalMs");
+constexpr LPCTSTR kSection             = TEXT("Preferences");
+constexpr LPCTSTR kKeyTipSize          = TEXT("TipSizePercent");
+constexpr LPCTSTR kLegacyKeyTipSize    = TEXT("LabelSizePercent");
+constexpr LPCTSTR kKeyOpacity          = TEXT("OpacityPercent");
+constexpr LPCTSTR kKeyDarkTheme        = TEXT("DarkTheme");
+constexpr LPCTSTR kLegacyKeyInvert     = TEXT("InvertColors");
+constexpr LPCTSTR kKeyHideBorder       = TEXT("HideBorder");
+constexpr LPCTSTR kKeyHideSeparator    = TEXT("HideSeparator");
+constexpr LPCTSTR kKeyCompactView      = TEXT("CompactView");
+constexpr LPCTSTR kKeyFontFace         = TEXT("FontFace");
+constexpr LPCTSTR kKeyFontWeight       = TEXT("FontWeight");
+constexpr LPCTSTR kKeyFontItalic       = TEXT("FontItalic");
+constexpr LPCTSTR kKeyFontUnderline    = TEXT("FontUnderline");
+constexpr LPCTSTR kKeyFontStrikeOut    = TEXT("FontStrikeOut");
+constexpr LPCTSTR kKeyRefreshMs        = TEXT("RefreshIntervalMs");
+constexpr LPCTSTR kKeyPollMs           = TEXT("PollIntervalMs");
 constexpr LPCTSTR kKeyStartWithWindows = TEXT("StartWithWindows");
-constexpr LPCTSTR kKeyAnimation = TEXT("Animation");
-constexpr LPCTSTR kKeyAnimationMs = TEXT("AnimationMs");
-constexpr LPCTSTR kIniName      = TEXT("WinNumTip.ini");
+constexpr LPCTSTR kKeyAnimation        = TEXT("Animation");
+constexpr LPCTSTR kKeyAnimationMs      = TEXT("AnimationMs");
+constexpr LPCTSTR kIniName             = TEXT("WinNumTip.ini");
 
 // Full path of the INI file next to the executable, built once by Load().
 TCHAR g_iniPath[MAX_PATH];
@@ -68,7 +68,7 @@ static_assert(IDS_ANIMATION_SLIDE == IDS_ANIMATION_SYSTEM + static_cast<int>(Pre
 // Load the INI name of 'animation' into 'buf': kAnimationSystem for System, otherwise its
 // IDS_ANIMATION_* string (IDS_ANIMATION_SYSTEM + value), the same text the drop-down shows.
 template <int N>
-LPCTSTR AnimationName(Preferences::Animation animation, TCHAR (&buf)[N]) {
+[[nodiscard]] LPCTSTR AnimationName(Preferences::Animation animation, TCHAR (&buf)[N]) {
     if (animation == Preferences::Animation::System) return WinAPI::String::Copy(buf, kAnimationSystem);
     return WinAPI::String::Load(GetModuleHandle(nullptr), IDS_ANIMATION_SYSTEM + static_cast<UINT>(animation), buf);
 }
@@ -88,7 +88,7 @@ LPCTSTR AnimationName(Preferences::Animation animation, TCHAR (&buf)[N]) {
 // Resolve the INI path to "<exe dir>\WinNumTip.ini". Falls back to a bare file name
 // (current directory) if the module path has no directory component.
 void BuildIniPath() {
-    g_iniPath[0] = 0;
+    g_iniPath[0] = TEXT('\0');
     const DWORD n = GetModuleFileName(nullptr, g_iniPath, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) { WinAPI::String::Copy(g_iniPath, kIniName); return; }
 
@@ -97,7 +97,7 @@ void BuildIniPath() {
         if (g_iniPath[i] == TEXT('\\')) slash = i;
     // Truncate after the last backslash (or to empty if none), then append the file name
     // into whatever room is left in the buffer.
-    g_iniPath[slash + 1] = 0;
+    g_iniPath[slash + 1] = TEXT('\0');
     WinAPI::String::Append(g_iniPath, kIniName);
 }
 

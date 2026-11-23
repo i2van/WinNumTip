@@ -248,7 +248,7 @@ namespace OS {
 [[nodiscard]] inline bool IsWindows10() {
     static int cached = -1;   // -1 = not yet checked, 0 = false, 1 = true
     if (cached < 0) {
-        OSVERSIONINFOEXW vi;
+        OSVERSIONINFOEX vi;
         ZeroMemory(&vi, sizeof(vi));
         vi.dwOSVersionInfoSize = sizeof(vi);
         vi.dwMajorVersion = 10;
@@ -260,7 +260,7 @@ namespace OS {
         VER_SET_CONDITION(mask, VER_MINORVERSION, VER_EQUAL);
         VER_SET_CONDITION(mask, VER_BUILDNUMBER,  VER_LESS);
 
-        cached = VerifyVersionInfoW(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask)
+        cached = VerifyVersionInfo(&vi, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask)
                      ? 1 : 0;
     }
     return cached != 0;
@@ -445,6 +445,47 @@ inline void SetPos(HWND dlg, int id, int pos) {
     SendDlgItemMessage(dlg, id, TBM_SETPOS, TRUE, pos);
 }
 
+// SetLineSize(trackBar, step): the thumb step for the arrow keys.
+inline void SetLineSize(HWND trackBar, int step) {
+    SendMessage(trackBar, TBM_SETLINESIZE, 0, step);
+}
+
+// GetThumbRect(trackBar, rc): the thumb's bounding rectangle, in the trackbar's client
+// coordinates.
+inline void GetThumbRect(HWND trackBar, RECT& rc) {
+    SendMessage(trackBar, TBM_GETTHUMBRECT, 0, reinterpret_cast<LPARAM>(&rc));
+}
+
 } // namespace TrackBar
+
+namespace ToolTip {
+
+// AddTool(tip, ti): register the tool 'ti' describes with tooltip control 'tip'. False on
+// failure.
+[[nodiscard]] inline bool AddTool(HWND tip, const TTTOOLINFO& ti) {
+    return SendMessage(tip, TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&ti)) != FALSE;
+}
+
+// UpdateTipText(tip, ti): replace the text of the tool 'ti' names with ti.lpszText.
+inline void UpdateTipText(HWND tip, const TTTOOLINFO& ti) {
+    SendMessage(tip, TTM_UPDATETIPTEXT, 0, reinterpret_cast<LPARAM>(&ti));
+}
+
+// TrackActivate(tip, ti, activate): show or hide a TTF_TRACK tool's tooltip.
+inline void TrackActivate(HWND tip, const TTTOOLINFO& ti, bool activate) {
+    SendMessage(tip, TTM_TRACKACTIVATE, activate ? TRUE : FALSE, reinterpret_cast<LPARAM>(&ti));
+}
+
+// TrackPosition(tip, x, y): move a tracking tooltip to screen point (x, y).
+inline void TrackPosition(HWND tip, int x, int y) {
+    SendMessage(tip, TTM_TRACKPOSITION, 0, MAKELPARAM(x, y));
+}
+
+// Pop(tip): hide the tooltip if it is showing.
+inline void Pop(HWND tip) {
+    SendMessage(tip, TTM_POP, 0, 0);
+}
+
+} // namespace ToolTip
 
 } // namespace WinAPI

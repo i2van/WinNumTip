@@ -66,10 +66,10 @@ struct TextRun {
 }
 
 // Ink overhangs of 'text' at the DC's current font, as positive pixel counts. Only the outer
-// glyphs can push ink outside the run: an interior overhang is absorbed by the neighbouring
+// glyphs can push ink outside the run: an interior overhang is absorbed by the neighboring
 // character's advance. GetCharABCWidths reports the bearings as a negative A (ink left of the
 // origin) or C (ink past the advance), and serves TrueType faces only -- a bitmap face
-// synthesises its slant and already carries it in the advance GetTextExtentPoint32 returns,
+// synthesizes its slant and already carries it in the advance GetTextExtentPoint32 returns,
 // so leaving both bearings at zero is the right answer there.
 void MeasureBearings(HDC dc, LPCTSTR text, int length, TextRun& run) {
     run.leftBearing = run.rightBearing = 0;
@@ -143,8 +143,8 @@ void MeasureBearings(HDC dc, LPCTSTR text, int length, TextRun& run) {
     return CreateFontIndirect(&lf);
 }
 
-// Draw one run inside 'box' with the given DrawText alignment flags. Each run is centred on
-// its own metrics, so a small name and a large digits run each sit optically centred in the
+// Draw one run inside 'box' with the given DrawText alignment flags. Each run is centered on
+// its own metrics, so a small name and a large digits run each sit optically centered in the
 // control rather than being tied to a shared baseline. DT_NOCLIP is essential: DrawText
 // otherwise clips to the very rect it lays the text out in, so the inset the caller applies
 // to make room for an italic overhang would clip that overhang away instead of showing it.
@@ -163,7 +163,7 @@ void DrawRun(HDC dc, HFONT font, LPCTSTR text, const RECT& box, UINT align) {
 }
 
 // Paint the preview: the face name in the control's own (dialog) font at the left, and the
-// tip digits in the fitted selected face at the right, each vertically centred. The
+// tip digits in the fitted selected face at the right, each vertically centered. The
 // background brush comes from the parent's WM_CTLCOLORSTATIC response, exactly as the stock
 // static control obtains it -- which also sets the DC's text and background colors.
 void OnPaint(HWND preview) {
@@ -257,9 +257,8 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnNcDestroy);
         HANDLE_MSG(hwnd, WM_SETCURSOR, OnSetCursor);
         case WM_ERASEBKGND: return TRUE;
+        default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
-
-    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 } // namespace

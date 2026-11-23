@@ -64,9 +64,10 @@ TCHAR g_opacityFormat[16];
 TCHAR g_refreshFormat[16];
 TCHAR g_pollFormat[16];
 
-// The animation-duration trackbar's tooltips (its "Duration:" label shows no value): g_hoverTip shows its value while the
-// mouse rests over it, g_dragTip tracks the thumb while it is dragged. Both are owned by the
-// dialog (destroyed with it) and show IDS_ANIMATION_DURATION, loaded into g_durationFormat.
+// The animation-duration trackbar's tooltips (its "Duration:" label shows no value):
+// g_hoverTip shows its value while the mouse rests over it, g_dragTip tracks the thumb while
+// it is dragged. Both are owned by the dialog (destroyed with it) and show
+// IDS_ANIMATION_DURATION, loaded into g_durationFormat.
 HWND  g_hoverTip;
 HWND  g_dragTip;
 TCHAR g_durationFormat[48];
@@ -177,8 +178,8 @@ void UpdateAnimationSliderState(HWND dlg) {
 
     TCHAR empty[1];
     empty[0] = TEXT('\0');
-    TTTOOLINFO ti = AnimationToolInfo(dlg, flags, empty);
-    VERIFY(SendMessage(tip, TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&ti)));
+    const TTTOOLINFO ti = AnimationToolInfo(dlg, flags, empty);
+    VERIFY(WinAPI::ToolTip::AddTool(tip, ti));
     return tip;
 }
 
@@ -197,8 +198,8 @@ void UpdateAnimationTips(HWND dlg) {
     const HWND tips[] = { g_hoverTip, g_dragTip };
     for (const HWND tip : tips) {
         if (!tip) continue;
-        TTTOOLINFO ti = AnimationToolInfo(dlg, 0, text);
-        SendMessage(tip, TTM_UPDATETIPTEXT, 0, reinterpret_cast<LPARAM>(&ti));
+        const TTTOOLINFO ti = AnimationToolInfo(dlg, 0, text);
+        WinAPI::ToolTip::UpdateTipText(tip, ti);
     }
 }
 
@@ -208,18 +209,18 @@ void UpdateAnimationTips(HWND dlg) {
 void TrackAnimationTip(HWND dlg, bool dragging) {
     if (!g_dragTip) return;
 
-    TTTOOLINFO ti = AnimationToolInfo(dlg, 0, nullptr);
+    const TTTOOLINFO ti = AnimationToolInfo(dlg, 0, nullptr);
     if (!dragging) {
-        SendMessage(g_dragTip, TTM_TRACKACTIVATE, FALSE, reinterpret_cast<LPARAM>(&ti));
+        WinAPI::ToolTip::TrackActivate(g_dragTip, ti, false);
         g_dragTipActive = false;
         return;
     }
 
-    if (g_hoverTip) SendMessage(g_hoverTip, TTM_POP, 0, 0);
+    if (g_hoverTip) WinAPI::ToolTip::Pop(g_hoverTip);
 
     const HWND slider = GetDlgItem(dlg, IDC_ANIMATION_SLIDER);
     RECT thumb;
-    SendMessage(slider, TBM_GETTHUMBRECT, 0, reinterpret_cast<LPARAM>(&thumb));
+    WinAPI::TrackBar::GetThumbRect(slider, thumb);
     VERIFY(ClientToScreen(slider, reinterpret_cast<POINT*>(&thumb.left)));
     VERIFY(ClientToScreen(slider, reinterpret_cast<POINT*>(&thumb.right)));
     const int center = (thumb.left + thumb.right) / 2;
@@ -232,11 +233,11 @@ void TrackAnimationTip(HWND dlg, bool dragging) {
         if (g_hoverTipShown && g_hoverTip) {
             VERIFY(GetWindowRect(g_hoverTip, &tip));
             g_dragTipY = tip.top;
-            SendMessage(g_dragTip, TTM_TRACKPOSITION, 0, MAKELPARAM(center, g_dragTipY));
-            SendMessage(g_dragTip, TTM_TRACKACTIVATE, TRUE, reinterpret_cast<LPARAM>(&ti));
+            WinAPI::ToolTip::TrackPosition(g_dragTip, center, g_dragTipY);
+            WinAPI::ToolTip::TrackActivate(g_dragTip, ti, true);
         } else {
-            SendMessage(g_dragTip, TTM_TRACKPOSITION, 0, MAKELPARAM(center, thumb.top));
-            SendMessage(g_dragTip, TTM_TRACKACTIVATE, TRUE, reinterpret_cast<LPARAM>(&ti));
+            WinAPI::ToolTip::TrackPosition(g_dragTip, center, thumb.top);
+            WinAPI::ToolTip::TrackActivate(g_dragTip, ti, true);
             RECT bar;
             VERIFY(GetWindowRect(g_dragTip, &tip));
             VERIFY(GetWindowRect(slider, &bar));
@@ -247,7 +248,7 @@ void TrackAnimationTip(HWND dlg, bool dragging) {
 
     RECT tip;
     VERIFY(GetWindowRect(g_dragTip, &tip));
-    SendMessage(g_dragTip, TTM_TRACKPOSITION, 0, MAKELPARAM(center - (tip.right - tip.left) / 2, g_dragTipY));
+    WinAPI::ToolTip::TrackPosition(g_dragTip, center - (tip.right - tip.left) / 2, g_dragTipY);
 }
 
 // Round the animation-duration trackbar to the nearest kAnimationStepMs: the arrow keys and
@@ -269,12 +270,15 @@ void UpdateCompactVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg, IDC_HIDE_SEPARATOR), compact ? SW_HIDE : SW_SHOW);
 }
 
-void UpdateApplyState(HWND dlg) {
-    const int tipPercent = Preferences::TipSizePercent();
-    const int savedSize = max(g_minPct, min(tipPercent, Preferences::kMaxPercent));
+// The saved tip size as a size-slider position: clamped up to the slider's minimum (see
+// g_minPct).
+[[nodiscard]] int SavedSizeSliderPos() {
+    return max(g_minPct, Preferences::TipSizePercent());
+}
 
+void UpdateApplyState(HWND dlg) {
     const bool changed =
-        WinAPI::TrackBar::GetPos(dlg, IDC_SIZE_SLIDER) != savedSize ||
+        WinAPI::TrackBar::GetPos(dlg, IDC_SIZE_SLIDER) != SavedSizeSliderPos() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_OPACITY_SLIDER) != Preferences::OpacityPercent() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_REFRESH_SLIDER) != Preferences::RefreshIntervalMs() ||
         WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER) != Preferences::PollIntervalMs() ||
@@ -349,11 +353,9 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
         g_minPct = max(kMinSliderPct, min(g_minPct, Preferences::kMaxPercent));
     }
 
-    const int tipPercent = Preferences::TipSizePercent();
-    const int cur = max(g_minPct, min(tipPercent, Preferences::kMaxPercent));
-
     const HWND tb = GetDlgItem(dlg, IDC_SIZE_SLIDER);
-    WinAPI::TrackBar::Init(tb, g_minPct, Preferences::kMaxPercent, kSliderTickFreq, kSliderPageStep, cur);
+    WinAPI::TrackBar::Init(tb, g_minPct, Preferences::kMaxPercent, kSliderTickFreq, kSliderPageStep,
+                           SavedSizeSliderPos());
     UpdateValueText(dlg);
 
     // Opacity slider: fixed percentage range from Preferences, seeded from the saved value.
@@ -386,7 +388,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     const HWND animationSlider = GetDlgItem(dlg, IDC_ANIMATION_SLIDER);
     WinAPI::TrackBar::Init(animationSlider, Preferences::kMinAnimationMs, Preferences::kMaxAnimationMs,
                            kAnimationStepMs, kAnimationStepMs, Preferences::AnimationMs());
-    SendMessage(animationSlider, TBM_SETLINESIZE, 0, kAnimationStepMs);
+    WinAPI::TrackBar::SetLineSize(animationSlider, kAnimationStepMs);
     InitAnimationTips(dlg, inst);
     UpdateAnimationTips(dlg);
     UpdateAnimationSliderState(dlg);
@@ -427,12 +429,11 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
             FontPicker::Close();
             VERIFY(EndDialog(dlg, IDOK));
             break;
-        case IDC_APPLY: {
+        case IDC_APPLY:
             SaveValues(dlg);
             UpdateApplyState(dlg);
             NotifyApplied(dlg);
             break;
-        }
         // The font preview is clickable too (FontPreview shows a hand cursor over it as the
         // hint): a click (STN_CLICKED, from the SS_NOTIFY style) opens the same font picker as
         // the Select... button beside it.
@@ -492,11 +493,11 @@ void OnFontPickerClosed(HWND dlg, WPARAM session) {
 }
 
 // The "Reset to defaults" SysLink was clicked (mouse) or activated (Enter): restore the
-// dialog's controls to their factory defaults -- the default tip size, no render
-// flags set (dark theme following the Windows mode, border/separator shown, not compact), the
-// Windows default animation at the default duration, start with Windows off, and the fallback (taskbar) font. Only the
-// controls are reset here; the change is persisted only
-// if the user then confirms with OK or Apply, so Cancel still discards unapplied changes.
+// dialog's controls to their factory defaults -- the default tip size, no render flags set
+// (dark theme following the Windows mode, border/separator shown, not compact), the Windows
+// default animation at the default duration, start with Windows off, and the fallback
+// (taskbar) font. Only the controls are reset here; the change is persisted only if the user
+// then confirms with OK or Apply, so Cancel still discards unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
     if (hdr->code == TTN_SHOW && hdr->hwndFrom == g_hoverTip) {
         g_hoverTipShown = true;
