@@ -114,7 +114,7 @@ BEGIN
     CONTROL         "",IDC_SIZE_SLIDER,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,7,21,256,26
     LTEXT           "Default",IDC_STATIC,7,48,80,9
     RTEXT           "Taskbar button",IDC_STATIC,173,48,90,9
-    LTEXT           "Tip &font:",IDC_STATIC,7,67,27,8
+    LTEXT           "Tip &font:",IDC_FONT_LABEL,7,67,27,8
     PUSHBUTTON      "Select...",IDC_FONT_BUTTON,213,64,50,14
     LTEXT           "Default",IDC_FONT_NAME,36,64,173,15,SS_NOPREFIX | SS_NOTIFY | SS_CENTERIMAGE | SS_ENDELLIPSIS | WS_BORDER
     CONTROL         "&Dark theme",IDC_DARK_THEME,"Button",BS_AUTOCHECKBOX | WS_GROUP | WS_TABSTOP,7,86,58,10

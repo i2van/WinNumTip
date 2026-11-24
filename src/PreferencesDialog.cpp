@@ -16,6 +16,8 @@
          : FALSE)
 #define WM_FONT_PICKER_CLOSED FontPickerHelper::kClosedMessage
 #define HANDLE_WM_FONT_PICKER_CLOSED(hwnd, wParam, lParam, fn) ((fn)((hwnd), (wParam)), TRUE)
+#define WM_FONT_PICKER_SHOWN FontPickerHelper::kShownMessage
+#define HANDLE_WM_FONT_PICKER_SHOWN(hwnd, wParam, lParam, fn) ((fn)((hwnd), (wParam)), TRUE)
 
 namespace {
 
@@ -581,6 +583,7 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
         HANDLE_MSG(dlg, WM_DESTROY,    OnDestroy);
         HANDLE_MSG(dlg, WM_FONT_PICKER_APPLY_SELECTION, OnFontPickerApply);
         HANDLE_MSG(dlg, WM_FONT_PICKER_CLOSED, OnFontPickerClosed);
+        HANDLE_MSG(dlg, WM_FONT_PICKER_SHOWN, FontPicker::OnShown);
         case WM_SYSCOMMAND:
             // Returning TRUE suppresses the dialog manager's own default for WM_SYSCOMMAND, so
             // the "?" button never enters help mode; OnSysCommand forwards the commands it does

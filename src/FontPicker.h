@@ -13,9 +13,14 @@ namespace FontPicker {
 // FONTSELECTORDLG template resource passed to ChooseFont.
 void Init(HWND dlg, HINSTANCE inst);
 
-// Open the ChooseFont common dialog modelessly (Preferences stays usable); when it closes
+// Open the ChooseFont common dialog modelessly (Preferences stays usable); the font preview
+// and Select... button are disabled only while the dialog is starting up. When it closes
 // through OK, OnClosed adopts the selection as the working font and refreshes the preview.
 void Open(HWND dlg);
+
+// Handle FontPickerHelper::kShownMessage ('session' is its wParam): re-enable the font
+// controls once the dialog is visible.
+void OnShown(HWND dlg, WPARAM session);
 
 // Handle FontPickerHelper::kClosedMessage ('session' is its wParam): on OK adopt the
 // selection as the working font and refresh the preview.

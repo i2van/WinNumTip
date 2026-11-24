@@ -19,7 +19,7 @@
 namespace {
 
 constexpr LPCTSTR kHelperSwitch = TEXT("--font-picker");
-constexpr DWORD kExchangeVersion = 5;
+constexpr DWORD kExchangeVersion = 6;
 
 // How long Close waits for a terminated helper to go away, so its dialog does not outlive
 // Preferences on screen.
@@ -30,6 +30,8 @@ struct Exchange {
     DWORD cbSize;
     DWORD version;
     HWND owner;
+    // The main process's session serial, echoed back in kShownMessage.
+    LONG serial;
     volatile HWND dialog;
     LOGFONT font;
     // The owner's persisted font, the baseline the Apply button measures the live selection
@@ -537,6 +539,9 @@ void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
     if (show) {
         RefreshChooseFontSample(dialog);
         UpdateChooseFontApplyState(dialog);
+        if (g_exchange && IsWindow(g_exchange->owner))
+            (void)PostMessage(g_exchange->owner, FontPickerHelper::kShownMessage,
+                              static_cast<WPARAM>(g_exchange->serial), 0);
     }
 }
 
@@ -791,13 +796,6 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         : FontPickerHelper::Result::Chosen;
 }
 
-void ShowError(HINSTANCE inst, HWND owner) {
-    TCHAR text[96];
-    TCHAR caption[32];
-    MessageBox(owner, WinAPI::String::Load(inst, IDS_FONT_PICKER_ERROR, text),
-               WinAPI::String::Load(inst, IDS_APP_NAME, caption), MB_OK | MB_ICONERROR);
-}
-
 // Thread-pool callback: the helper process exited, so tell its owner to collect the result.
 VOID CALLBACK OnHelperExited(PVOID context, BOOLEAN /*timedOut*/) {
     const Session* const session = static_cast<const Session*>(context);
@@ -881,12 +879,19 @@ bool RunIfRequested(HINSTANCE inst) {
     return true;
 }
 
-bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefault,
-          const LOGFONT& applied, bool appliedDefault, const LOGFONT& fallback) {
+void ShowError(HINSTANCE inst, HWND owner) {
+    TCHAR text[96];
+    TCHAR caption[32];
+    MessageBox(owner, WinAPI::String::Load(inst, IDS_FONT_PICKER_ERROR, text),
+               WinAPI::String::Load(inst, IDS_APP_NAME, caption), MB_OK | MB_ICONERROR);
+}
+
+OpenResult Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefault,
+                const LOGFONT& applied, bool appliedDefault, const LOGFONT& fallback) {
     // Only one font dialog at a time: bring the open one forward instead.
     if (g_exchange) {
         (void)ActivateDialog();
-        return false;
+        return OpenResult::AlreadyOpen;
     }
 
     TCHAR mappingName[128];
@@ -898,22 +903,21 @@ bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefaul
                                              0, sizeof(Exchange), mappingName);
     if (!mapping || GetLastError() == ERROR_ALREADY_EXISTS) {
         if (mapping) CloseHandle(mapping);
-        ShowError(inst, owner);
-        return false;
+        return OpenResult::Failed;
     }
 
     Exchange* const exchange = static_cast<Exchange*>(
         MapViewOfFile(mapping, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(Exchange)));
     if (!exchange) {
         CloseHandle(mapping);
-        ShowError(inst, owner);
-        return false;
+        return OpenResult::Failed;
     }
 
     ZeroMemory(exchange, sizeof(*exchange));
     exchange->cbSize = sizeof(*exchange);
     exchange->version = kExchangeVersion;
     exchange->owner = owner;
+    exchange->serial = serial;
     MoveMemory(&exchange->font, &initial, sizeof(exchange->font));
     MoveMemory(&exchange->applied, &applied, sizeof(exchange->applied));
     MoveMemory(&exchange->fallback, &fallback, sizeof(exchange->fallback));
@@ -926,8 +930,7 @@ bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefaul
     if (exeLength == 0 || exeLength >= ARRAYSIZE(exe)) {
         VERIFY(UnmapViewOfFile(exchange));
         VERIFY(CloseHandle(mapping));
-        ShowError(inst, owner);
-        return false;
+        return OpenResult::Failed;
     }
     WinAPI::String::Format(commandLine, TEXT("\"%s\" %s \"%s\""), exe, kHelperSwitch, mappingName);
 
@@ -942,8 +945,7 @@ bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefaul
     if (!started) {
         VERIFY(UnmapViewOfFile(exchange));
         VERIFY(CloseHandle(mapping));
-        ShowError(inst, owner);
-        return false;
+        return OpenResult::Failed;
     }
 
     VERIFY(CloseHandle(pi.hThread));
@@ -960,10 +962,13 @@ bool Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initialDefaul
         g_processWait = nullptr;
         VERIFY(TerminateProcess(g_process, ERROR_GEN_FAILURE));
         ReleaseSession();
-        ShowError(inst, owner);
-        return false;
+        return OpenResult::Failed;
     }
-    return true;
+    return OpenResult::Opened;
+}
+
+bool IsSession(WPARAM session) {
+    return g_exchange && static_cast<LONG>(session) == g_session.serial;
 }
 
 Result Complete(WPARAM session, LOGFONT& selected) {

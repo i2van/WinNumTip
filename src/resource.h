@@ -47,6 +47,7 @@
 #define IDC_ANIMATION                   1026
 #define IDC_ANIMATION_SLIDER            1027
 #define IDC_ANIMATION_DURATION_LABEL    1028
+#define IDC_FONT_LABEL                  1029
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -58,7 +59,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40017
-#define _APS_NEXT_CONTROL_VALUE         1029
+#define _APS_NEXT_CONTROL_VALUE         1030
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

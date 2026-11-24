@@ -178,6 +178,7 @@ void OnPaint(HWND preview) {
     const HBRUSH brush = FORWARD_WM_CTLCOLORSTATIC(GetParent(preview), dc, preview, SendMessage);
     if (brush) VERIFY(FillRect(dc, &rc, brush));
     SetBkMode(dc, TRANSPARENT);
+    if (!IsWindowEnabled(preview)) SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT));
 
     // Not brace-initialized: a zeroed buffer this large makes the compiler emit a memset
     // call, which this CRT-less build does not provide. GetWindowText terminates it.
@@ -256,6 +257,10 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
         HANDLE_MSG(hwnd, WM_PREVIEW_SETTEXT, OnSetText);
         HANDLE_MSG(hwnd, WM_NCDESTROY, OnNcDestroy);
         HANDLE_MSG(hwnd, WM_SETCURSOR, OnSetCursor);
+        case WM_ENABLE:
+            (void)DefSubclassProc(hwnd, msg, wParam, lParam);
+            VERIFY(InvalidateRect(hwnd, nullptr, FALSE));
+            return 0;
         case WM_ERASEBKGND: return TRUE;
         default: return DefSubclassProc(hwnd, msg, wParam, lParam);
     }

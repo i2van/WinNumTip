@@ -43,6 +43,12 @@ void UpdateFontPreview(HWND dlg) {
                         g_workingFont);
 }
 
+void EnableFontControls(HWND dlg, bool enable) {
+    WinAPI::Window::Enable(GetDlgItem(dlg, IDC_FONT_LABEL), enable);
+    WinAPI::Window::Enable(GetDlgItem(dlg, IDC_FONT_NAME), enable);
+    WinAPI::Window::Enable(GetDlgItem(dlg, IDC_FONT_BUTTON), enable);
+}
+
 void SetWorkingSelection(HWND dlg, const LOGFONT* selected) {
     if (selected) {
         MoveMemory(&g_workingFont, selected, sizeof(g_workingFont));
@@ -90,17 +96,44 @@ void Init(HWND dlg, HINSTANCE inst) {
 }
 
 void Open(HWND dlg) {
+    // An already visible font dialog is just brought forward.
+    if (FontPickerHelper::ActiveDialog()) {
+        (void)FontPickerHelper::ActivateDialog();
+        return;
+    }
+
     // The dialog opens on the working font, but its Apply button measures against the saved
     // one: the two differ whenever a previous OK adopted a selection that Preferences has not
     // persisted yet, and Apply must stay live for exactly that difference.
     LOGFONT applied;
     const bool appliedSet = SavedSelection(applied);
 
-    (void)FontPickerHelper::Open(g_inst, dlg, g_workingFont, !g_workingFontSet, applied,
-                                 !appliedSet, g_fallbackFont);
+    // Disable and repaint before launching the helper, so the controls appear disabled while
+    // its dialog is starting up. OnShown re-enables them once it is visible; a failed launch
+    // re-enables them here, and a helper that exits before showing it, in OnClosed.
+    EnableFontControls(dlg, false);
+    VERIFY(UpdateWindow(GetDlgItem(dlg, IDC_FONT_NAME)));
+    VERIFY(UpdateWindow(GetDlgItem(dlg, IDC_FONT_BUTTON)));
+
+    const FontPickerHelper::OpenResult opened =
+        FontPickerHelper::Open(g_inst, dlg, g_workingFont, !g_workingFontSet, applied,
+                               !appliedSet, g_fallbackFont);
+    if (opened == FontPickerHelper::OpenResult::Opened) return;
+
+    EnableFontControls(dlg, true);
+    if (opened == FontPickerHelper::OpenResult::Failed) FontPickerHelper::ShowError(g_inst, dlg);
+}
+
+void OnShown(HWND dlg, WPARAM session) {
+    if (FontPickerHelper::IsSession(session)) EnableFontControls(dlg, true);
 }
 
 void OnClosed(HWND dlg, WPARAM session) {
+    if (!FontPickerHelper::IsSession(session)) return;
+
+    // Re-enable first: Complete reports a failed helper with a modal error box.
+    EnableFontControls(dlg, true);
+
     LOGFONT selected;
     ZeroMemory(&selected, sizeof(selected));
     const FontPickerHelper::Result result = FontPickerHelper::Complete(session, selected);
