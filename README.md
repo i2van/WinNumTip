@@ -158,9 +158,8 @@ is turned off, otherwise fade or slide as Windows does for tooltips; the drop-do
 the effect it currently resolves to. An explicit choice is used regardless of those
 settings.
 
-The **Duration** slider next to the drop-down sets how long the effect takes: `50`-`500` ms
-in `50` ms steps, default `200` ms; hover over or drag it to see the value. It is disabled
-when the effect is **None**.
+The **Duration** drop-down next to the effect sets how long it takes: `50`-`500` ms in `50`
+ms steps, default `200` ms. It is disabled when the effect is **None**.
 
 > `WinNumTip.ini` keys: `Animation` (`System`, `Expand`, `Fade`, `None`, `Roll` or `Slide`),
 > `AnimationMs`

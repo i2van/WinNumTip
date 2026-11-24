@@ -17,7 +17,6 @@
 #define IDS_ANIMATION_NONE              209
 #define IDS_ANIMATION_ROLL              210
 #define IDS_ANIMATION_SLIDE             211
-#define IDS_ANIMATION_DURATION          212
 #define IDS_CONFIG_LOCATION             213
 #define IDC_ABOUT_NAME                  1001
 #define IDC_ABOUT_DESC                  1002
@@ -45,9 +44,10 @@
 #define IDC_ABOUT_UPDATE                1024
 #define IDC_START_WITH_WINDOWS          1025
 #define IDC_ANIMATION                   1026
-#define IDC_ANIMATION_SLIDER            1027
+#define IDC_ANIMATION_DURATION          1027
 #define IDC_ANIMATION_DURATION_LABEL    1028
 #define IDC_FONT_LABEL                  1029
+#define IDC_ANIMATION_DURATION_UNIT     1030
 #define IDM_EXIT                        40001
 #define IDM_ABOUT                       40002
 #define IDM_PREFERENCES                 40003
@@ -59,7 +59,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         40017
-#define _APS_NEXT_CONTROL_VALUE         1030
+#define _APS_NEXT_CONTROL_VALUE         1031
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

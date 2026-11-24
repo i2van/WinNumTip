@@ -45,8 +45,8 @@ constexpr int kPollPageStep    = 25;
 constexpr int kOpacityTickFreq = 10;
 constexpr int kOpacityPageStep = 10;
 
-// Animation-duration trackbar tuning: every arrow key, PageUp/PageDown and drag moves the thumb
-// in steps of N milliseconds (see SnapAnimationSlider).
+// Animation-duration drop-down: one item every N milliseconds from kMinAnimationMs to
+// kMaxAnimationMs (see InitAnimationDurationCombo).
 constexpr int kAnimationStepMs = 50;
 static_assert(Preferences::kMinAnimationMs % kAnimationStepMs == 0 &&
               Preferences::kMaxAnimationMs % kAnimationStepMs == 0);
@@ -65,20 +65,6 @@ TCHAR g_sizeFormat[16];
 TCHAR g_opacityFormat[16];
 TCHAR g_refreshFormat[16];
 TCHAR g_pollFormat[16];
-
-// The animation-duration trackbar's tooltips (its "Duration:" label shows no value):
-// g_hoverTip shows its value while the mouse rests over it, g_dragTip tracks the thumb while
-// it is dragged. Both are owned by the dialog (destroyed with it) and show
-// IDS_ANIMATION_DURATION, loaded into g_durationFormat.
-HWND  g_hoverTip;
-HWND  g_dragTip;
-TCHAR g_durationFormat[48];
-
-// Whether g_dragTip is showing (a drag is in progress), and its screen y fixed at drag start.
-bool g_dragTipActive;
-int  g_dragTipY;
-// Whether g_hoverTip has been shown (TTN_SHOW), so its window rect holds a real position.
-bool g_hoverTipShown;
 
 // Refresh the size readout from the trackbar: "Default" at the minimum, otherwise the "%d%%"
 // template applied to the percentage.
@@ -146,119 +132,54 @@ void InitAnimationCombo(HWND dlg, HINSTANCE inst) {
     return sel < 0 ? Preferences::Animation::System : static_cast<Preferences::Animation>(sel);
 }
 
-// Enable the animation-duration trackbar (and its label) only while the drop-down's choice
-// (System resolved from the Windows setting) actually animates; None has no duration.
-void UpdateAnimationSliderState(HWND dlg) {
+// Enable the animation-duration drop-down (and its labels) only while the Tip animation
+// choice (System resolved from the Windows setting) actually animates; None has no duration.
+void UpdateAnimationDurationState(HWND dlg) {
     Preferences::Animation animation = ReadAnimation(dlg);
     if (animation == Preferences::Animation::System) animation = Preferences::SystemAnimation();
     const BOOL enable = animation != Preferences::Animation::None;
     EnableWindow(GetDlgItem(dlg, IDC_ANIMATION_DURATION_LABEL), enable);
-    EnableWindow(GetDlgItem(dlg, IDC_ANIMATION_SLIDER), enable);
+    EnableWindow(GetDlgItem(dlg, IDC_ANIMATION_DURATION), enable);
+    EnableWindow(GetDlgItem(dlg, IDC_ANIMATION_DURATION_UNIT), enable);
 }
 
-// A TTTOOLINFO naming the animation-duration trackbar as the tool (by window handle).
-[[nodiscard]] TTTOOLINFO AnimationToolInfo(HWND dlg, UINT flags, LPTSTR text) {
-    // Zeroed with ZeroMemory rather than brace-initialized, which would emit a memset call
-    // this CRT-less build does not provide.
-    TTTOOLINFO ti;
-    ZeroMemory(&ti, sizeof(ti));
-    ti.cbSize   = sizeof(ti);
-    ti.uFlags   = TTF_IDISHWND | flags;
-    ti.hwnd     = dlg;
-    ti.uId      = reinterpret_cast<UINT_PTR>(GetDlgItem(dlg, IDC_ANIMATION_SLIDER));
-    ti.lpszText = text;
-    return ti;
+// Insert an animation-duration item for 'ms' at 'index' (-1 appends), keeping its value in the
+// item data. Returns the item's index, or a negative value on failure.
+int InsertAnimationDuration(HWND combo, int index, int ms) {
+    TCHAR item[16];
+    const int inserted = ComboBox_InsertString(combo, index, WinAPI::String::Format(item, TEXT("%d"), ms));
+    ASSERT(inserted >= 0);
+    if (inserted >= 0) VERIFY(ComboBox_SetItemData(combo, inserted, ms) != CB_ERR);
+    return inserted;
 }
 
-// Create a dialog-owned tooltip window with the animation-duration trackbar as its one tool.
-[[nodiscard]] HWND CreateAnimationTip(HWND dlg, HINSTANCE inst, UINT flags) {
-    const HWND tip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
-                                    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                                    dlg, nullptr, inst, nullptr);
-    ASSERT(tip);
-    if (!tip) return nullptr;
-
-    TCHAR empty[1];
-    empty[0] = TEXT('\0');
-    const TTTOOLINFO ti = AnimationToolInfo(dlg, flags, empty);
-    VERIFY(WinAPI::ToolTip::AddTool(tip, ti));
-    return tip;
+// Select the animation-duration item for 'ms'. A value that is not one of the steps (a
+// hand-edited INI value) gets its own item, inserted in order, so an untouched duration is
+// saved back unchanged rather than silently rounded.
+void SelectAnimationDuration(HWND dlg, int ms) {
+    const HWND combo = GetDlgItem(dlg, IDC_ANIMATION_DURATION);
+    const int count = ComboBox_GetCount(combo);
+    int index = 0;
+    while (index < count && static_cast<int>(ComboBox_GetItemData(combo, index)) < ms) ++index;
+    if (index == count || static_cast<int>(ComboBox_GetItemData(combo, index)) != ms)
+        index = InsertAnimationDuration(combo, index == count ? -1 : index, ms);
+    if (index >= 0) VERIFY(ComboBox_SetCurSel(combo, index) >= 0);
 }
 
-// Create the hover tooltip (subclassing the trackbar to see the mouse) and the tracking one
-// shown while dragging (see TrackAnimationTip).
-void InitAnimationTips(HWND dlg, HINSTANCE inst) {
-    WinAPI::String::Load(inst, IDS_ANIMATION_DURATION, g_durationFormat);
-    g_hoverTip = CreateAnimationTip(dlg, inst, TTF_SUBCLASS);
-    g_dragTip  = CreateAnimationTip(dlg, inst, TTF_TRACK | TTF_ABSOLUTE);
+// Fill the animation-duration drop-down with kMinAnimationMs..kMaxAnimationMs in
+// kAnimationStepMs steps (the "ms" unit is a label after it) and select the current value.
+void InitAnimationDurationCombo(HWND dlg) {
+    const HWND combo = GetDlgItem(dlg, IDC_ANIMATION_DURATION);
+    for (int ms = Preferences::kMinAnimationMs; ms <= Preferences::kMaxAnimationMs; ms += kAnimationStepMs)
+        (void)InsertAnimationDuration(combo, -1, ms);
+    SelectAnimationDuration(dlg, Preferences::AnimationMs());
 }
 
-// Refresh both tooltips' text from the animation-duration trackbar.
-void UpdateAnimationTips(HWND dlg) {
-    TCHAR text[64];
-    WinAPI::String::Format(text, g_durationFormat, WinAPI::TrackBar::GetPos(dlg, IDC_ANIMATION_SLIDER));
-    const HWND tips[] = { g_hoverTip, g_dragTip };
-    for (const HWND tip : tips) {
-        if (!tip) continue;
-        const TTTOOLINFO ti = AnimationToolInfo(dlg, 0, text);
-        WinAPI::ToolTip::UpdateTipText(tip, ti);
-    }
-}
-
-// Show the tracking tooltip centered on the trackbar's thumb while it is dragged (hiding the
-// hover one), or hide it once the drag ends. Only x follows the thumb: y is fixed when the drag
-// starts (at the hover tip's, else above the trackbar), so the tip slides without bobbing.
-void TrackAnimationTip(HWND dlg, bool dragging) {
-    if (!g_dragTip) return;
-
-    const TTTOOLINFO ti = AnimationToolInfo(dlg, 0, nullptr);
-    if (!dragging) {
-        WinAPI::ToolTip::TrackActivate(g_dragTip, ti, false);
-        g_dragTipActive = false;
-        return;
-    }
-
-    if (g_hoverTip) WinAPI::ToolTip::Pop(g_hoverTip);
-
-    const HWND slider = GetDlgItem(dlg, IDC_ANIMATION_SLIDER);
-    RECT thumb;
-    WinAPI::TrackBar::GetThumbRect(slider, thumb);
-    VERIFY(ClientToScreen(slider, reinterpret_cast<POINT*>(&thumb.left)));
-    VERIFY(ClientToScreen(slider, reinterpret_cast<POINT*>(&thumb.right)));
-    const int center = (thumb.left + thumb.right) / 2;
-    if (!g_dragTipActive) {
-        // Keep the y the hover tip was last shown at, so the tip does not jump vertically as
-        // the drag starts (a hidden window keeps its position). If it never showed (a quick
-        // drag), show the drag tip first so its real window size (text, margins, frame) can
-        // be measured, then fix y so the whole tip sits above the trackbar, clear of the thumb.
-        RECT tip;
-        if (g_hoverTipShown && g_hoverTip) {
-            VERIFY(GetWindowRect(g_hoverTip, &tip));
-            g_dragTipY = tip.top;
-            WinAPI::ToolTip::TrackPosition(g_dragTip, center, g_dragTipY);
-            WinAPI::ToolTip::TrackActivate(g_dragTip, ti, true);
-        } else {
-            WinAPI::ToolTip::TrackPosition(g_dragTip, center, thumb.top);
-            WinAPI::ToolTip::TrackActivate(g_dragTip, ti, true);
-            RECT bar;
-            VERIFY(GetWindowRect(g_dragTip, &tip));
-            VERIFY(GetWindowRect(slider, &bar));
-            g_dragTipY = bar.top - (tip.bottom - tip.top);
-        }
-        g_dragTipActive = true;
-    }
-
-    RECT tip;
-    VERIFY(GetWindowRect(g_dragTip, &tip));
-    WinAPI::ToolTip::TrackPosition(g_dragTip, center - (tip.right - tip.left) / 2, g_dragTipY);
-}
-
-// Round the animation-duration trackbar to the nearest kAnimationStepMs: the arrow keys and
-// PageUp/PageDown already step by it, but a drag or a click lands on any millisecond.
-void SnapAnimationSlider(HWND dlg) {
-    const int pos = WinAPI::TrackBar::GetPos(dlg, IDC_ANIMATION_SLIDER);
-    const int snapped = (pos + kAnimationStepMs / 2) / kAnimationStepMs * kAnimationStepMs;
-    if (snapped != pos) WinAPI::TrackBar::SetPos(dlg, IDC_ANIMATION_SLIDER, snapped);
+// Read the animation-duration drop-down (see InitAnimationDurationCombo).
+[[nodiscard]] int ReadAnimationMs(HWND dlg) {
+    const HWND combo = GetDlgItem(dlg, IDC_ANIMATION_DURATION);
+    const int sel = ComboBox_GetCurSel(combo);
+    return sel < 0 ? Preferences::AnimationMs() : static_cast<int>(ComboBox_GetItemData(combo, sel));
 }
 
 // Show or hide the Hide separator checkbox based on whether Compact view is currently
@@ -286,7 +207,7 @@ void UpdateApplyState(HWND dlg) {
         WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER) != Preferences::PollIntervalMs() ||
         ReadFlags(dlg) != Preferences::Flags() ||
         ReadAnimation(dlg) != Preferences::ShowAnimation() ||
-        WinAPI::TrackBar::GetPos(dlg, IDC_ANIMATION_SLIDER) != Preferences::AnimationMs() ||
+        ReadAnimationMs(dlg) != Preferences::AnimationMs() ||
         ReadStartWithWindows(dlg) != Preferences::StartWithWindows() ||
         FontPicker::HasChanges();
     WinAPI::Window::Enable(GetDlgItem(dlg, IDC_APPLY), changed);
@@ -299,7 +220,7 @@ void SaveValues(HWND dlg) {
     Preferences::SetPollIntervalMs(WinAPI::TrackBar::GetPos(dlg, IDC_POLL_SLIDER));
     Preferences::SetFlags(ReadFlags(dlg));
     Preferences::SetShowAnimation(ReadAnimation(dlg));
-    Preferences::SetAnimationMs(WinAPI::TrackBar::GetPos(dlg, IDC_ANIMATION_SLIDER));
+    Preferences::SetAnimationMs(ReadAnimationMs(dlg));
     // Persist the autostart flag, then reconcile the registry entry with it right away:
     // create/correct the entry when enabled, remove it when disabled.
     const bool startWithWindows = ReadStartWithWindows(dlg);
@@ -385,15 +306,8 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     VERIFY(CheckDlgButton(dlg, IDC_START_WITH_WINDOWS, Preferences::StartWithWindows() ? BST_CHECKED : BST_UNCHECKED));
     UpdateCompactVisibility(dlg);
     InitAnimationCombo(dlg, inst);
-
-    // Animation-duration slider: its value has no readout, so it is shown in tooltips.
-    const HWND animationSlider = GetDlgItem(dlg, IDC_ANIMATION_SLIDER);
-    WinAPI::TrackBar::Init(animationSlider, Preferences::kMinAnimationMs, Preferences::kMaxAnimationMs,
-                           kAnimationStepMs, kAnimationStepMs, Preferences::AnimationMs());
-    WinAPI::TrackBar::SetLineSize(animationSlider, kAnimationStepMs);
-    InitAnimationTips(dlg, inst);
-    UpdateAnimationTips(dlg);
-    UpdateAnimationSliderState(dlg);
+    InitAnimationDurationCombo(dlg);
+    UpdateAnimationDurationState(dlg);
 
     // Seed and show the font preview from the saved selection (or the fallback when none is
     // set); the font picker owns this state.
@@ -410,12 +324,7 @@ BOOL OnInitDialog(HWND dlg, HWND /*focus*/, LPARAM lParam) {
     return FALSE;
 }
 
-void OnHScroll(HWND dlg, HWND ctl, UINT code, int /*pos*/) {
-    if (ctl == GetDlgItem(dlg, IDC_ANIMATION_SLIDER)) {
-        SnapAnimationSlider(dlg);
-        UpdateAnimationTips(dlg);
-        if (code == TB_THUMBTRACK || code == TB_ENDTRACK) TrackAnimationTip(dlg, code == TB_THUMBTRACK);
-    }
+void OnHScroll(HWND dlg, HWND /*ctl*/, UINT /*code*/, int /*pos*/) {
     UpdateValueText(dlg);
     UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);
     UpdateReadoutText(dlg, IDC_REFRESH_SLIDER, IDC_REFRESH_VALUE, g_refreshFormat);
@@ -456,8 +365,11 @@ void OnCommand(HWND dlg, int id, HWND /*ctl*/, UINT notify) {
             break;
         case IDC_ANIMATION:
             if (notify != CBN_SELCHANGE) break;
-            UpdateAnimationSliderState(dlg);
+            UpdateAnimationDurationState(dlg);
             UpdateApplyState(dlg);
+            break;
+        case IDC_ANIMATION_DURATION:
+            if (notify == CBN_SELCHANGE) UpdateApplyState(dlg);
             break;
         case IDCANCEL:
             FontPicker::Close();
@@ -501,11 +413,6 @@ void OnFontPickerClosed(HWND dlg, WPARAM session) {
 // (taskbar) font. Only the controls are reset here; the change is persisted only if the user
 // then confirms with OK or Apply, so Cancel still discards unapplied changes.
 BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
-    if (hdr->code == TTN_SHOW && hdr->hwndFrom == g_hoverTip) {
-        g_hoverTipShown = true;
-        return FALSE;
-    }
-
     if (idCtrl == IDC_RESET && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
         WinAPI::TrackBar::SetPos(dlg, IDC_SIZE_SLIDER, max(g_minPct, Preferences::kDefaultTipSizePercent));
         WinAPI::TrackBar::SetPos(dlg, IDC_OPACITY_SLIDER, Preferences::kDefaultOpacityPercent);
@@ -517,9 +424,8 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
         VERIFY(CheckDlgButton(dlg, IDC_HIDE_SEPARATOR, BST_UNCHECKED));
         VERIFY(CheckDlgButton(dlg, IDC_START_WITH_WINDOWS, BST_UNCHECKED));
         VERIFY(ComboBox_SetCurSel(GetDlgItem(dlg, IDC_ANIMATION), static_cast<int>(Preferences::Animation::System)) >= 0);
-        WinAPI::TrackBar::SetPos(dlg, IDC_ANIMATION_SLIDER, Preferences::kDefaultAnimationMs);
-        UpdateAnimationSliderState(dlg);
-        UpdateAnimationTips(dlg);
+        SelectAnimationDuration(dlg, Preferences::kDefaultAnimationMs);
+        UpdateAnimationDurationState(dlg);
         UpdateCompactVisibility(dlg);
         UpdateValueText(dlg);
         UpdateReadoutText(dlg, IDC_OPACITY_SLIDER, IDC_OPACITY_VALUE, g_opacityFormat);
@@ -537,11 +443,6 @@ BOOL OnNotify(HWND dlg, int idCtrl, NMHDR* hdr) {
 // Release the font-picker resources (preview + sample fonts, and the font dialog should it
 // still be open) as the dialog closes.
 void OnDestroy(HWND /*dlg*/) {
-    // The tooltips are owned by the dialog, so Windows destroys them along with it.
-    g_hoverTip = nullptr;
-    g_dragTip  = nullptr;
-    g_dragTipActive = false;
-    g_hoverTipShown = false;
     FontPicker::Cleanup();
 }
 
