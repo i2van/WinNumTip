@@ -596,10 +596,8 @@ INT_PTR CALLBACK PreferencesProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 namespace PreferencesDialog {
 
 // Bring Preferences and, when open, the helper process's ChooseFont dialog forward together,
-// with the font dialog ending up the active one on top. Foregrounding an owned window does not
-// raise its owner, so Preferences is foregrounded first -- which raises the font dialog it owns
-// along with it -- and only then is the font dialog activated. Returns false when Preferences
-// is not open.
+// with the font dialog ending up the active one on top: Preferences is foregrounded first, and
+// only then is the font dialog activated. Returns false when Preferences is not open.
 bool ActivateDialog() {
     if (!g_dlg) return false;
 
@@ -623,12 +621,11 @@ bool ActivateDialog() {
 
 INT_PTR Show(HINSTANCE inst, HWND owner) {
     // Only one Preferences dialog at a time: if it's already up, make it the active window
-    // -- even over an open ChooseFont dialog, which, being owned by Preferences, is raised
-    // along with it -- unless a popup of its own (e.g. a message box) is up over it. Report
-    // IDCANCEL since no new choice was made.
+    // -- even over an open ChooseFont dialog, which is not owned by Preferences and so is not
+    // its last active popup -- unless a popup of its own (e.g. a message box) is up over it.
+    // Report IDCANCEL since no new choice was made.
     if (g_dlg) {
-        HWND target = GetLastActivePopup(g_dlg);
-        if (target == FontPickerHelper::ActiveDialog()) target = g_dlg;
+        const HWND target = GetLastActivePopup(g_dlg);
         if (GetForegroundWindow() != target) WinAPI::Dialog::Foreground(g_dlg, target);
         return IDCANCEL;
     }

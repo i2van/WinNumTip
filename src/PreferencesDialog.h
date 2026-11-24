@@ -14,7 +14,7 @@ namespace PreferencesDialog {
 [[nodiscard]] INT_PTR Show(HINSTANCE inst, HWND owner);
 
 // Bring the already-open Preferences dialog to the foreground, along with its ChooseFont
-// helper dialog (see FontPickerHelper::ActivateDialog) when one is open over it, so a
+// helper dialog (see FontPickerHelper::ActivateDialog) when one is open, so a
 // tray-icon click while switched away to another app surfaces both windows together rather
 // than just whichever one is topmost. Returns false when Preferences is not currently open.
 [[nodiscard]] bool ActivateDialog();

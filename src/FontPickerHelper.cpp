@@ -535,11 +535,6 @@ void OnChooseFontNcDestroy(HWND /*dialog*/) {
 void OnChooseFontShowWindow(HWND dialog, BOOL show, UINT status) {
     FORWARD_WM_SHOWWINDOW(dialog, show, status, DefSubclassProc);
     if (show) {
-        // Make the dialog modeless: ChooseFont's DialogBox has disabled its owner,
-        // Preferences, by the time it shows the dialog, so enable it again. EndDialog still
-        // re-enables it as usual (it disabled it), which is harmless now.
-        if (IsWindow(g_parentDialog))
-            (void)EnableWindow(g_parentDialog, TRUE);
         RefreshChooseFontSample(dialog);
         UpdateChooseFontApplyState(dialog);
     }
@@ -559,8 +554,8 @@ void OnChooseFontPaint(HWND dialog) {
 
 // WM_FONT_PICKER_ACTIVATE (posted by FontPickerHelper::ActivateDialog in the main process,
 // right after its own SetForegroundWindow call): restore/raise/activate the font dialog on its
-// own UI thread. The dialog is owned by Preferences, so the window manager keeps Preferences
-// directly behind it without any explicit z-order handling here.
+// own UI thread. PreferencesDialog::ActivateDialog foregrounds Preferences first, so it ends
+// up directly behind the font dialog.
 void OnActivateChooseFont(HWND dialog) {
     if (IsIconic(dialog)) ShowWindow(dialog, SW_RESTORE);
     SetActiveWindow(dialog);
@@ -693,8 +688,8 @@ BOOL OnChooseFontInitDialog(HWND dialog, HWND /*focus*/, LPARAM chooseFontParam)
     // the generic one.
     DialogIcon::Set(dialog, g_inst);
 
-    // The dialog is modeless, so open it beside its owner, Preferences, leaving that in view
-    // and usable; when neither side has room, center it over Preferences instead.
+    // The dialog is modeless, so open it beside Preferences, leaving that in view and
+    // usable; when neither side has room, center it over Preferences instead.
     if (IsWindow(g_parentDialog) && !PlaceBesideOwner(dialog, g_parentDialog))
         CenterOverOwner(dialog, g_parentDialog);
     SetForegroundWindow(dialog);
@@ -739,11 +734,27 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     ZeroMemory(&g_dialogResult, sizeof(g_dialogResult));
     MoveMemory(&g_fallbackFont, &fallback, sizeof(g_fallbackFont));
 
-    // Own the dialog by the main process's Preferences window, so it stays above Preferences
-    // and has no separate Alt+Tab/taskbar presence of its own. The dialog is modeless with
-    // respect to Preferences (see OnChooseFontShowWindow), and the main process does not wait
-    // for it: it learns of the helper's exit through a thread-pool wait (see Open).
+    // 'owner' is the main process's Preferences window. The dialog is modeless with respect
+    // to it, and the main process does not wait for it: it learns of the helper's exit
+    // through a thread-pool wait (see Open).
     if (!IsWindow(owner)) return FontPickerHelper::Result::Failed;
+
+    // Own the dialog by a hidden window of this process rather than by Preferences: as with
+    // Preferences (owned by the hidden message window), that gives it an Alt+Tab entry of
+    // its own but no taskbar button, and keeps it out of Preferences' last-active-popup
+    // chain, so switching to Preferences activates Preferences rather than the font dialog.
+    // ChooseFont's DialogBox disables this window instead of Preferences, which therefore
+    // stays usable. It covers Preferences' rect so the dialog, which opens on its owner's
+    // monitor, starts at Preferences' DPI -- PlaceBesideOwner then measures it at its final
+    // size, rather than before a cross-monitor DPI change resizes it.
+    RECT ownerRect;
+    if (!GetWindowRect(owner, &ownerRect)) return FontPickerHelper::Result::Failed;
+    const HWND hiddenOwner = CreateWindowEx(WS_EX_TOOLWINDOW, WC_STATIC, TEXT(""), WS_POPUP,
+                                            ownerRect.left, ownerRect.top,
+                                            ownerRect.right - ownerRect.left,
+                                            ownerRect.bottom - ownerRect.top,
+                                            nullptr, nullptr, g_inst, nullptr);
+    if (!hiddenOwner) return FontPickerHelper::Result::Failed;
 
     LOGFONT font;
     MoveMemory(&font, &initial, sizeof(font));
@@ -751,7 +762,7 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     CHOOSEFONT chooseFont;
     ZeroMemory(&chooseFont, sizeof(chooseFont));
     chooseFont.lStructSize = sizeof(chooseFont);
-    chooseFont.hwndOwner = owner;
+    chooseFont.hwndOwner = hiddenOwner;
     chooseFont.hInstance = g_inst;
     chooseFont.lpTemplateName = kFontTemplate;
     chooseFont.lpLogFont = &font;
@@ -763,6 +774,7 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     const BOOL chosen = ChooseFont(&chooseFont);
     g_chooseFontResult = nullptr;
     const DWORD error = chosen ? 0 : CommDlgExtendedError();
+    VERIFY(DestroyWindow(hiddenOwner));
 
     SetDialog(nullptr);
     g_parentDialog = nullptr;
@@ -1007,7 +1019,7 @@ bool ReadAppliedFont(LOGFONT& selected) {
 
 // Foreground the still-open font dialog (from the main process) and ask it to fully
 // reactivate itself on its own UI thread (OnActivateChooseFont, via the posted message
-// below). PreferencesDialog::ActivateDialog raises its owner, Preferences, first.
+// below). PreferencesDialog::ActivateDialog raises Preferences first.
 bool ActivateDialog() {
     const HWND active = ActiveDialog();
     if (!active) return false;
@@ -1022,8 +1034,8 @@ bool ActivateDialog() {
     return !!PostMessage(active, WM_FONT_PICKER_ACTIVATE, 0, 0);
 }
 
-// A hidden dialog is treated as gone: EndDialog hides it and activates Preferences before it is
-// destroyed, and redirecting that activation back to the hidden dialog would bounce focus.
+// A hidden dialog is treated as gone: EndDialog hides it before it is destroyed (Finish then
+// activates Preferences), and redirecting that activation back to it would bounce focus.
 HWND ActiveDialog() {
     const HWND active = g_exchange ? g_exchange->dialog : nullptr;
     return active && IsWindow(active) && IsWindowVisible(active) ? active : nullptr;
