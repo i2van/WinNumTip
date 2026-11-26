@@ -90,6 +90,7 @@ template <int N>
 void BuildIniPath() {
     g_iniPath[0] = TEXT('\0');
     const DWORD n = GetModuleFileName(nullptr, g_iniPath, MAX_PATH);
+    ASSERT(n != 0);
     if (n == 0 || n >= MAX_PATH) { WinAPI::String::Copy(g_iniPath, kIniName); return; }
 
     int slash = -1;

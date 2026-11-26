@@ -61,7 +61,7 @@ void OnCommand(HWND hwnd, int id, HWND /*ctl*/, UINT /*notify*/) {
             break;
         case IDC_APPLY: ApplyPreferenceChanges();  break;
         case IDM_ABOUT: About::Show(g_inst, hwnd); break;
-        case IDM_EXIT:  DestroyWindow(hwnd);       break;
+        case IDM_EXIT:  VERIFY(DestroyWindow(hwnd)); break;
     }
 }
 

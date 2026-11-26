@@ -69,13 +69,13 @@ void ArmRefreshTimer() {
 
 // Destroy all child controls (number tips + separators) of the overlay window.
 void DestroyChildren(HWND hwnd) {
-    while (const HWND hwndChild = GetWindow(hwnd, GW_CHILD)) DestroyWindow(hwndChild);
+    while (const HWND hwndChild = GetWindow(hwnd, GW_CHILD)) VERIFY(DestroyWindow(hwndChild));
 }
 
 // Release the per-show theme/font/brush. The window itself is left intact so it can
 // be reused by a refresh; the caller decides whether to destroy the window.
 void FreeResources() {
-    if (g_theme) { CloseThemeData(g_theme); g_theme = nullptr; }
+    if (g_theme) { VERIFY(SUCCEEDED(CloseThemeData(g_theme))); g_theme = nullptr; }
     if (g_ownFont) WinAPI::GdiObject::Delete(g_font);
     g_font = nullptr;
     g_ownFont = false;
@@ -104,10 +104,10 @@ void ComputeStripBounds(const RECT& tr, UINT edge, UINT dpi,
 // own individual one below.
 void PaintFrame(HDC hdc, const RECT& r, int w) {
     RECT edge;
-    edge = {.left = r.left,      .top = r.top,        .right = r.right,     .bottom = r.top + w   }; FillRect(hdc, &edge, g_borderBrush);
-    edge = {.left = r.left,      .top = r.bottom - w,  .right = r.right,     .bottom = r.bottom    }; FillRect(hdc, &edge, g_borderBrush);
-    edge = {.left = r.left,      .top = r.top,         .right = r.left + w,  .bottom = r.bottom    }; FillRect(hdc, &edge, g_borderBrush);
-    edge = {.left = r.right - w, .top = r.top,         .right = r.right,     .bottom = r.bottom    }; FillRect(hdc, &edge, g_borderBrush);
+    edge = {.left = r.left,      .top = r.top,        .right = r.right,     .bottom = r.top + w   }; VERIFY(FillRect(hdc, &edge, g_borderBrush));
+    edge = {.left = r.left,      .top = r.bottom - w,  .right = r.right,     .bottom = r.bottom    }; VERIFY(FillRect(hdc, &edge, g_borderBrush));
+    edge = {.left = r.left,      .top = r.top,         .right = r.left + w,  .bottom = r.bottom    }; VERIFY(FillRect(hdc, &edge, g_borderBrush));
+    edge = {.left = r.right - w, .top = r.top,         .right = r.right,     .bottom = r.bottom    }; VERIFY(FillRect(hdc, &edge, g_borderBrush));
 }
 
 // Paint a border, fixed to the system window-frame color (see g_borderBrush) rather than
@@ -149,7 +149,7 @@ void PaintBackground(HWND hwnd, HDC hdc) {
     RECT rc;
     VERIFY(GetClientRect(hwnd, &rc));
     if (g_flags.darkTheme && g_bgBrush) {
-        FillRect(hdc, &rc, g_bgBrush);
+        VERIFY(FillRect(hdc, &rc, g_bgBrush));
     } else if (g_theme && g_flags.hideBorder) {
         // DrawThemeBackground stretches the visual style's own edge/highlight to fit our
         // slim strip, which leaves a residual line right where the border would be even
@@ -164,7 +164,7 @@ void PaintBackground(HWND hwnd, HDC hdc) {
     } else if (g_theme) {
         DrawThemeBackground(g_theme, hdc, g_bgPart, 0, &rc, nullptr);
     } else {
-        FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1));
+        VERIFY(FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1)));
     }
 
     if (!g_flags.hideBorder) PaintBorder(hwnd, hdc, rc);
@@ -189,8 +189,8 @@ void OnPrintClient(HWND hwnd, HDC hdc) {
 HBRUSH OnCtlColorStatic(HWND /*hwnd*/, HDC hdc, HWND child, int /*type*/) {
     if (GetDlgCtrlID(child) == kSepId && g_lineBrush)
         return g_lineBrush;
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, g_textColor);
+    VERIFY(SetBkMode(hdc, TRANSPARENT));
+    VERIFY(SetTextColor(hdc, g_textColor) != CLR_INVALID);
     DrawThemeParentBackground(child, hdc, nullptr);
 
     return static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
@@ -288,6 +288,7 @@ void AddStatic(HWND parent, HINSTANCE inst, DWORD style, LPCTSTR text,
     const HWND s = CreateWindowEx(0, TEXT("STATIC"), text,
                             WS_CHILD | WS_VISIBLE | style,
                             x, y, w, h, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
+    ASSERT(s);
     if (s && g_font) SetWindowFont(s, g_font, FALSE);
 }
 
@@ -381,6 +382,7 @@ void Init(HINSTANCE inst) {
     wc.hInstance = inst;
     wc.lpszClassName = kOverlayClass;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    ASSERT(wc.hCursor);
     wc.hbrBackground = nullptr;   // background comes from the taskbar theme
     VERIFY(RegisterClassEx(&wc));
 }
@@ -396,7 +398,7 @@ void Hide() {
     if (!g_active && !g_overlay) return;
     g_active = false;
     if (g_overlay) {
-        DestroyWindow(g_overlay);   // also destroys the child STATIC controls + timer
+        VERIFY(DestroyWindow(g_overlay));   // also destroys the child STATIC controls + timer
         g_overlay = nullptr;
     }
     FreeResources();
@@ -413,6 +415,7 @@ void Show(IUIAutomation* uia, HINSTANCE inst) {
     g_inst = inst;
     if (!g_overlay) {
         g_overlay = CreateOverlayWindow(inst);
+        ASSERT(g_overlay);
         if (!g_overlay) return;
     }
     // Re-arm each session (the window and its timer persist across sessions) so a changed
@@ -477,7 +480,8 @@ void ApplyEmpty() {
 void PrimeSurface() {
     VERIFY(SetLayeredWindowAttributes(g_overlay, 0, 0, LWA_ALPHA));
     ShowWindow(g_overlay, SW_SHOWNA);
-    RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    VERIFY(RedrawWindow(g_overlay, nullptr, nullptr,
+                        RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW));
     ShowWindow(g_overlay, SW_HIDE);
     ApplyLayeredAttributes();
 }
@@ -597,7 +601,7 @@ void PathRect(HDC hdc, int left, int top, int right, int bottom) {
         { right, bottom },
         { left,  bottom },
     };
-    Polygon(hdc, pts, 4);
+    VERIFY(Polygon(hdc, pts, 4));
 }
 
 // Shape the overlay window itself for the "compact" flag, instead of painting a
@@ -624,7 +628,7 @@ void PathRect(HDC hdc, int left, int top, int right, int bottom) {
 // place the tips and separators; hwnd is always g_overlay.
 void ApplyStripRegion(HWND hwnd, const RECT& ov, const RECT* btn, int n, bool vertical) {
     if (!g_flags.compact) {
-        SetWindowRgn(hwnd, nullptr, FALSE);
+        VERIFY(SetWindowRgn(hwnd, nullptr, FALSE));
         return;
     }
 
@@ -661,7 +665,7 @@ void ApplyStripRegion(HWND hwnd, const RECT& ov, const RECT* btn, int n, bool ve
     VERIFY(BeginPath(hdc));
     // WINDING (rather than the default ALTERNATE) so touching or overlapping rectangles
     // union together instead of XOR-cancelling where they meet.
-    SetPolyFillMode(hdc, WINDING);
+    VERIFY(SetPolyFillMode(hdc, WINDING));
 
     if (!g_flags.hideSeparator) {
         for (int i = 0; i + 1 < n; ++i) {
@@ -781,8 +785,8 @@ void Refresh() {
     if (wasVisible) SetWindowRedraw(g_overlay, FALSE);
     DestroyChildren(g_overlay);
     FreeResources();
-    SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
-                 SWP_NOACTIVATE | SWP_NOREDRAW);
+    VERIFY(SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
+                        SWP_NOACTIVATE | SWP_NOREDRAW));
 
     g_theme = OpenThemeData(g_overlay, TEXT("TaskBar"));
     const COLORREF barColor  = SampleBarColor(g_theme, g_bgPart, OW, OH);
@@ -819,7 +823,10 @@ void Refresh() {
     NONCLIENTMETRICS ncm;
     ZeroMemory(&ncm, sizeof(ncm));
     ncm.cbSize = sizeof(ncm);
-    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi)) {
+    const BOOL gotMetrics =
+        SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi);
+    ASSERT(gotMetrics);
+    if (gotMetrics) {
         if (defThick > 0 && thick > defThick) {
             LOGFONT* const lf = &ncm.lfMessageFont;
             const int base = lf->lfHeight < 0 ? -lf->lfHeight : lf->lfHeight;
@@ -845,6 +852,7 @@ void Refresh() {
             lf->lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE; // let the face name decide
         }
         g_font = CreateFontIndirect(&ncm.lfMessageFont);
+        ASSERT(g_font);
         g_ownFont = g_font != nullptr;
     }
     if (!g_font) {
@@ -924,9 +932,10 @@ void Refresh() {
 
     if (wasVisible) SetWindowRedraw(g_overlay, TRUE);
     if (wasVisible || !AnimateShow(edge)) {
-        SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_NOREDRAW);
-        RedrawWindow(g_overlay, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
+        VERIFY(SetWindowPos(g_overlay, HWND_TOPMOST, ov.left, ov.top, OW, OH,
+                            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | SWP_NOREDRAW));
+        VERIFY(RedrawWindow(g_overlay, nullptr, nullptr,
+                            RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN));
     }
 }
 

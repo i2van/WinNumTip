@@ -22,6 +22,7 @@ void Add(HINSTANCE inst, HWND msgWnd) {
     g_msgWnd = msgWnd;
     // Registered once; the same id is returned for every caller in the session.
     if (!g_taskbarCreated) g_taskbarCreated = RegisterWindowMessage(TEXT("TaskbarCreated"));
+    ASSERT(g_taskbarCreated);
 
     ZeroMemory(&g_nid, sizeof(g_nid));
     g_nid.cbSize = sizeof(g_nid);
@@ -65,6 +66,7 @@ void ShowMenu(HINSTANCE inst, bool show, HWND commandTarget) {
     if (!show) return;
 
     const HMENU menu = LoadMenu(inst, MAKEINTRESOURCE(IDR_NOTIFYICONMENU));
+    ASSERT(menu);
     if (!menu) return;
     const HMENU sub = GetSubMenu(menu, 0);
     ASSERT(sub);

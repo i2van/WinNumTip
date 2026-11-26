@@ -254,9 +254,12 @@ bool IsWinGetInstall() {
         // the end, while the directory looked for sits near the front), so it is searched as
         // it stands; only an outright failure, which leaves nothing to search, is "no".
         TCHAR path[MAX_PATH];
-        cached = GetModuleFileName(nullptr, path, ARRAYSIZE(path)) != 0 &&
+        const DWORD length = GetModuleFileName(nullptr, path, ARRAYSIZE(path));
+        ASSERT(length != 0);
+        cached = length != 0 &&
                  (StrStrI(path, kWinGetPackages) || StrStrI(path, kWinGetLinks))
-                     ? 1 : 0;
+                     ? 1
+                     : 0;
     }
 
     return cached != 0;

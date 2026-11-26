@@ -34,7 +34,9 @@ HFONT g_digitsFont;
 // window-frame metric taken at the control's DPI -- the same measure the overlay insets its
 // separators by -- so the spacing scales with the display like the rest of the UI.
 [[nodiscard]] bool ContentRect(HWND preview, RECT& content) {
-    if (!GetClientRect(preview, &content)) return false;
+    const BOOL gotClientRect = GetClientRect(preview, &content);
+    ASSERT(gotClientRect);
+    if (!gotClientRect) return false;
 
     const int inset =
         GetSystemMetricsForDpi(SM_CXFIXEDFRAME, WinAPI::Window::GetDpi(preview));
@@ -140,7 +142,9 @@ void MeasureBearings(HDC dc, LPCTSTR text, int length, TextRun& run) {
 
     if (!bestHeight) return nullptr;
     lf.lfHeight = -bestHeight;
-    return CreateFontIndirect(&lf);
+    const HFONT font = CreateFontIndirect(&lf);
+    ASSERT(font);
+    return font;
 }
 
 // Draw one run inside 'box' with the given DrawText alignment flags. Each run is centered on
@@ -177,8 +181,9 @@ void OnPaint(HWND preview) {
 
     const HBRUSH brush = FORWARD_WM_CTLCOLORSTATIC(GetParent(preview), dc, preview, SendMessage);
     if (brush) VERIFY(FillRect(dc, &rc, brush));
-    SetBkMode(dc, TRANSPARENT);
-    if (!IsWindowEnabled(preview)) SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT));
+    VERIFY(SetBkMode(dc, TRANSPARENT));
+    if (!IsWindowEnabled(preview))
+        VERIFY(SetTextColor(dc, GetSysColor(COLOR_GRAYTEXT)) != CLR_INVALID);
 
     // Not brace-initialized: a zeroed buffer this large makes the compiler emit a memset
     // call, which this CRT-less build does not provide. GetWindowText terminates it.

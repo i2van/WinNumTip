@@ -17,6 +17,7 @@ constexpr int kCmdChars = MAX_PATH + 2;
 
     TCHAR exe[MAX_PATH];
     const DWORD n = GetModuleFileName(nullptr, exe, ARRAYSIZE(exe));
+    ASSERT(n != 0);
     if (n == 0 || n >= ARRAYSIZE(exe)) return false;
 
     WinAPI::String::Copy(cmd, TEXT("\""));
