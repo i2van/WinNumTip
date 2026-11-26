@@ -58,6 +58,10 @@ HINSTANCE g_sessionInst;
 HANDLE g_mapping;
 HANDLE g_process;
 HANDLE g_processWait;
+// Kill-on-close job holding the helper, so the system terminates it when this process ends
+// without reaching Close (a crash or an external kill) instead of leaving its dialog behind.
+// Null when the job could not be set up and the helper was started without one.
+HANDLE g_job;
 
 // Helper-side state for the live ChooseFont dialog. g_lastAppliedFont/g_lastAppliedDefault
 // track the owner's persisted font -- seeded from it, then advanced by each Apply -- so the
@@ -187,7 +191,7 @@ void OnFontSamplePaint(HWND hwnd) {
 
     const HBRUSH brush = FORWARD_WM_CTLCOLORSTATIC(GetParent(hwnd), dc, hwnd, SendMessage);
     if (brush) VERIFY(FillRect(dc, &rc, brush));
-    SetBkMode(dc, TRANSPARENT);
+    VERIFY(SetBkMode(dc, TRANSPARENT));
 
     const HFONT font = g_sampleFont ? g_sampleFont : GetWindowFont(hwnd);
     SampleRun run = { { 0, 0 }, 0, 0 };
@@ -436,13 +440,13 @@ void ApplyChooseFontSelection(HWND dialog) {
 
     const int face = ComboBox_FindStringExact(nameCombo, -1, g_fallbackFont.lfFaceName);
     if (face < 0) return false;
-    ComboBox_SetCurSel(nameCombo, face);
+    VERIFY(ComboBox_SetCurSel(nameCombo, face) >= 0);
     FORWARD_WM_COMMAND(dialog, cmb1, nameCombo, CBN_SELCHANGE, SendMessage);
 
     if (styleCombo) {
         const int style = ComboBox_FindStringExact(styleCombo, -1, TEXT("Regular"));
         if (style >= 0) {
-            ComboBox_SetCurSel(styleCombo, style);
+            VERIFY(ComboBox_SetCurSel(styleCombo, style) >= 0);
             FORWARD_WM_COMMAND(dialog, cmb2, styleCombo, CBN_SELCHANGE, SendMessage);
         }
     }
@@ -759,6 +763,7 @@ UINT_PTR CALLBACK ChooseFontHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
                                             ownerRect.right - ownerRect.left,
                                             ownerRect.bottom - ownerRect.top,
                                             nullptr, nullptr, g_inst, nullptr);
+    ASSERT(hiddenOwner);
     if (!hiddenOwner) return FontPickerHelper::Result::Failed;
 
     LOGFONT font;
@@ -814,6 +819,10 @@ void ReleaseSession() {
         VERIFY(CloseHandle(g_process));
         g_process = nullptr;
     }
+    if (g_job) {
+        VERIFY(CloseHandle(g_job));
+        g_job = nullptr;
+    }
     if (g_exchange) {
         VERIFY(UnmapViewOfFile(g_exchange));
         g_exchange = nullptr;
@@ -825,6 +834,64 @@ void ReleaseSession() {
     g_session.owner = nullptr;
 }
 
+// Start the helper directly inside a new kill-on-close job (PROC_THREAD_ATTRIBUTE_JOB_LIST),
+// so the system terminates it should this process end without reaching Close -- a crash or
+// an external kill. A suspended start assigned to the job afterwards would instead leave the
+// helper suspended forever should this process die in between. On success 'job' owns the
+// job, whose closing kills the helper; on failure nothing is left open.
+[[nodiscard]] bool StartHelperInJob(LPCTSTR exe, LPTSTR commandLine, HANDLE& job,
+                                    PROCESS_INFORMATION& pi) {
+    job = CreateJobObject(nullptr, nullptr);
+    ASSERT(job);
+    if (!job) return false;
+
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
+    ZeroMemory(&limits, sizeof(limits));
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    const BOOL limited = SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                                 &limits, sizeof(limits));
+    ASSERT(limited);
+
+    BOOL started = FALSE;
+    if (limited) {
+        // Sizing call: it fails by design, with ERROR_INSUFFICIENT_BUFFER.
+        SIZE_T attributesSize = 0;
+        (void)InitializeProcThreadAttributeList(nullptr, 1, 0, &attributesSize);
+        const LPPROC_THREAD_ATTRIBUTE_LIST attributes = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+            HeapAlloc(GetProcessHeap(), 0, attributesSize));
+        ASSERT(attributes);
+        if (attributes) {
+            const BOOL initialized =
+                InitializeProcThreadAttributeList(attributes, 1, 0, &attributesSize);
+            ASSERT(initialized);
+            if (initialized) {
+                const BOOL updated = UpdateProcThreadAttribute(
+                    attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, &job, sizeof(job),
+                    nullptr, nullptr);
+                ASSERT(updated);
+                if (updated) {
+                    STARTUPINFOEX startup;
+                    ZeroMemory(&startup, sizeof(startup));
+                    startup.StartupInfo.cb = sizeof(startup);
+                    startup.lpAttributeList = attributes;
+                    started = CreateProcess(exe, commandLine, nullptr, nullptr, FALSE,
+                                            EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
+                                            &startup.StartupInfo, &pi);
+                }
+                DeleteProcThreadAttributeList(attributes);
+            }
+            VERIFY(HeapFree(GetProcessHeap(), 0, attributes));
+        }
+    }
+
+    if (!started) {
+        VERIFY(CloseHandle(job));
+        job = nullptr;
+    }
+
+    return started != FALSE;
+}
+
 } // namespace
 
 namespace FontPickerHelper {
@@ -832,22 +899,26 @@ namespace FontPickerHelper {
 bool RunIfRequested(HINSTANCE inst) {
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    ASSERT(argv);
     if (!argv) return false;
 
     const bool helper = argc == 3 && lstrcmpW(argv[1], kHelperSwitch) == 0;
     if (!helper) {
-        LocalFree(argv);
+        VERIFY(!LocalFree(argv));
         return false;
     }
 
+    // Not asserted: the owner may legitimately be gone already (it died before this helper
+    // got here), taking the mapping with it.
     const HANDLE mapping = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE, argv[2]);
-    LocalFree(argv);
+    VERIFY(!LocalFree(argv));
     if (!mapping) return true;
 
     Exchange* const exchange = static_cast<Exchange*>(
         MapViewOfFile(mapping, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(Exchange)));
+    ASSERT(exchange);
     if (!exchange) {
-        CloseHandle(mapping);
+        VERIFY(CloseHandle(mapping));
         return true;
     }
 
@@ -856,8 +927,11 @@ bool RunIfRequested(HINSTANCE inst) {
 
         Result result = Result::Failed;
         const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        ASSERT(SUCCEEDED(com));
         if (SUCCEEDED(com)) {
-            if (WinAPI::CommonControls::Init(ICC_LINK_CLASS)) {
+            const BOOL controls = WinAPI::CommonControls::Init(ICC_LINK_CLASS);
+            ASSERT(controls);
+            if (controls) {
                 LOGFONT selected;
                 ZeroMemory(&selected, sizeof(selected));
                 result = ShowDialog(
@@ -901,15 +975,19 @@ OpenResult Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initial
 
     const HANDLE mapping = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
                                              0, sizeof(Exchange), mappingName);
-    if (!mapping || GetLastError() == ERROR_ALREADY_EXISTS) {
-        if (mapping) CloseHandle(mapping);
+    // The name is unique to this process and session, so it can never already exist.
+    const bool created = mapping && GetLastError() != ERROR_ALREADY_EXISTS;
+    ASSERT(created);
+    if (!created) {
+        if (mapping) VERIFY(CloseHandle(mapping));
         return OpenResult::Failed;
     }
 
     Exchange* const exchange = static_cast<Exchange*>(
         MapViewOfFile(mapping, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(Exchange)));
+    ASSERT(exchange);
     if (!exchange) {
-        CloseHandle(mapping);
+        VERIFY(CloseHandle(mapping));
         return OpenResult::Failed;
     }
 
@@ -926,6 +1004,7 @@ OpenResult Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initial
 
     TCHAR exe[MAX_PATH];
     const DWORD exeLength = GetModuleFileName(nullptr, exe, ARRAYSIZE(exe));
+    ASSERT(exeLength != 0);
     TCHAR commandLine[MAX_PATH + ARRAYSIZE(mappingName) + 32];
     if (exeLength == 0 || exeLength >= ARRAYSIZE(exe)) {
         VERIFY(UnmapViewOfFile(exchange));
@@ -934,14 +1013,19 @@ OpenResult Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initial
     }
     WinAPI::String::Format(commandLine, TEXT("\"%s\" %s \"%s\""), exe, kHelperSwitch, mappingName);
 
-    STARTUPINFO si;
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
 
-    const BOOL started = CreateProcess(exe, commandLine, nullptr, nullptr, FALSE, 0,
-                                       nullptr, nullptr, &si, &pi);
+    // The job is best-effort: without one the helper still starts, it just is not reaped
+    // should this process die without reaching Close.
+    bool started = StartHelperInJob(exe, commandLine, g_job, pi);
+    if (!started) {
+        STARTUPINFO si;
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        started = CreateProcess(exe, commandLine, nullptr, nullptr, FALSE, 0,
+                                nullptr, nullptr, &si, &pi) != FALSE;
+    }
     if (!started) {
         VERIFY(UnmapViewOfFile(exchange));
         VERIFY(CloseHandle(mapping));
@@ -957,8 +1041,10 @@ OpenResult Open(HINSTANCE inst, HWND owner, const LOGFONT& initial, bool initial
     g_sessionInst = inst;
     g_session.owner = owner;
     g_session.serial = serial;
-    if (!RegisterWaitForSingleObject(&g_processWait, g_process, OnHelperExited, &g_session,
-                                     INFINITE, WT_EXECUTEONLYONCE)) {
+    const BOOL waiting = RegisterWaitForSingleObject(&g_processWait, g_process, OnHelperExited,
+                                                     &g_session, INFINITE, WT_EXECUTEONLYONCE);
+    ASSERT(waiting);
+    if (!waiting) {
         g_processWait = nullptr;
         VERIFY(TerminateProcess(g_process, ERROR_GEN_FAILURE));
         ReleaseSession();
